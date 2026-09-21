@@ -92,12 +92,11 @@ export default function Home() {
 
   const fmtCOP = (val) => `$ ${val.toLocaleString("es-CO")}`;
 
-  // ── MANEJO DE FOTO Y ESCANEO ──
+  // ── MANEJO DE FOTO Y ESCANEO (Sin necesidad de claves externas) ──
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Crear vista previa
     const reader = new FileReader();
     reader.onload = async (evt) => {
       const base64Image = evt.target.result;
@@ -107,39 +106,65 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  const parsearLineasCC358 = (text) => {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    const resultado = {
+      1000: 0, "200a": 0, 500: 0, "100a": 0,
+      "200b": 0, "50a": 0, "100b": 0, "50b": 0
+    };
+    const orden = ["1000", "200a", "500", "100a", "200b", "50a", "100b", "50b"];
+    let idx = 0;
+
+    for (const l of lines) {
+      const lineaNormalizada = l.replace(/1\s*K/gi, "1000").replace(/O/gi, "0").replace(/o/gi, "0");
+      const nums = lineaNormalizada.match(/\d+/g);
+      if (!nums || nums.length === 0) continue;
+
+      if (nums.length >= 2 && idx < orden.length) {
+        // En la pantalla: [Denominación] [Cantidad] [Subtotal] -> nums[1] es la cantidad!
+        resultado[orden[idx]] = parseInt(nums[1], 10) || 0;
+        idx++;
+      } else if (nums.length === 1 && idx < orden.length) {
+        resultado[orden[idx]] = parseInt(nums[0], 10) || 0;
+        idx++;
+      }
+    }
+    return resultado;
+  };
+
   const procesarEscaneo = async (base64Image) => {
     setScanning(true);
-    setScanStatus("Analizando pantalla de la CC358 con IA...");
+    setScanStatus("Leyendo pantalla de la CC358...");
     setMensaje(null);
 
     try {
-      const res = await fetch("/api/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Image, apiKey })
+      // 1. Cargar Tesseract dinámicamente en el navegador
+      const Tesseract = (await import("tesseract.js")).default;
+      const res = await Tesseract.recognize(base64Image, "eng", {
+        logger: (m) => {
+          if (m.status === "recognizing text") {
+            setScanStatus(`Leyendo números: ${Math.round(m.progress * 100)}%`);
+          }
+        }
       });
 
-      const data = await res.json();
+      const texto = res.data.text || "";
+      const monedasDetectadas = parsearLineasCC358(texto);
 
-      if (!res.ok) {
-        throw new Error(data.error || "Error al procesar la imagen");
-      }
-
-      if (data.monedas) {
-        setMonedas((prev) => ({ ...prev, ...data.monedas }));
-        setMensaje({
-          tipo: "success",
-          texto: "✅ ¡Pantalla leída exitosamente! Revisa las cantidades abajo."
-        });
-      }
+      setMonedas((prev) => ({ ...prev, ...monedasDetectadas }));
+      setMensaje({
+        tipo: "success",
+        texto: "✅ ¡Pantalla leída con éxito! Revisa o ajusta las cantidades si lo deseas."
+      });
     } catch (err) {
       console.error(err);
-      setMensaje({ tipo: "error", texto: `Error en escaneo: ${err.message}` });
+      setMensaje({ tipo: "error", texto: `Aviso: ${err.message}. Puedes escribir los números a mano.` });
     } finally {
       setScanning(false);
       setScanStatus("");
     }
   };
+
 
   // ── GUARDAR EN GOOGLE SHEETS ──
   const handleGuardar = async (filaSeleccionada = null) => {
