@@ -10,6 +10,8 @@ credentials.json
 captura_cc358.log
 test_camara.jpg
 ocr_test.png
+*.png
+
 
 # Python
 __pycache__/
@@ -18,5 +20,10 @@ __pycache__/
 .env
 venv/
 env/
-.vscode/
-.idea/
+# Node / Next.js
+node_modules/
+.next/
+out/
+.env*.local
+*.tsbuildinfo
+

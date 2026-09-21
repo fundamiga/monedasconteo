@@ -1,0 +1,35 @@
+{
+  "name": "planmaquinamonedas",
+  "version": "1.0.0",
+  "description": "Este proyecto conecta la máquina contadora de monedas **SAT CC358** con un PC a través de un puerto serial RS-232 y genera reportes automáticos en **Excel**.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fundamiga/monedasconteo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/fundamiga/monedasconteo/issues"
+  },
+  "homepage": "https://github.com/fundamiga/monedasconteo#readme",
+  "dependencies": {
+    "googleapis": "^181.0.0",
+    "lucide-react": "^1.47.0",
+    "next": "^14.2.24",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
+}
