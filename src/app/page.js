@@ -452,29 +452,24 @@ export default function Home() {
 
             {/* 1. MODO CÁMARA EN VIVO */}
             {modoCamara === "live" && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center space-y-3">
-                <div className="relative rounded-xl overflow-hidden bg-black aspect-4/3 flex items-center justify-center border border-slate-800">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
+                <div className="relative rounded-xl overflow-hidden bg-black border border-slate-700" style={{ aspectRatio: "16/7" }}>
                   <video
                     ref={videoRef}
                     playsInline
                     muted
                     className="w-full h-full object-cover"
                   />
-                  {/* Recuadro de guía para centrar la pantalla azul */}
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-6">
-                    <div className="w-full h-full border-2 border-dashed border-blue-400/80 rounded-xl shadow-2xl flex flex-col justify-between p-2">
-                      <span className="text-[10px] bg-blue-900/80 text-blue-200 font-bold px-2 py-0.5 rounded self-start">
-                        Centra la pantalla CC358 aquí
-                      </span>
-                      <span className="text-[9px] text-blue-300 text-right">
-                        8 filas de monedas
-                      </span>
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-3">
+                    <div className="w-full h-full border-2 border-blue-400 rounded-lg flex items-start justify-between p-1.5" style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)" }}>
+                      <span className="text-[9px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded">CC358</span>
+                      <span className="text-[9px] text-blue-300">8 filas</span>
                     </div>
                   </div>
 
                   {scanning && (
-                    <div className="absolute inset-0 bg-black/75 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10">
-                      <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-2" />
+                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center gap-2 z-10">
+                      <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
                       <p className="text-xs font-bold text-blue-200">{scanStatus}</p>
                     </div>
                   )}
@@ -488,10 +483,10 @@ export default function Home() {
                   <button
                     onClick={capturarFrameEnVivo}
                     disabled={scanning || !streamActive}
-                    className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition disabled:opacity-50 text-sm"
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition disabled:opacity-50 text-sm"
                   >
-                    <Camera className="w-5 h-5" />
-                    ESCANEAR PANTALLA EN VIVO
+                    <Camera className="w-4 h-4" />
+                    ESCANEAR PANTALLA
                   </button>
                 )}
               </div>
@@ -509,15 +504,15 @@ export default function Home() {
                 />
 
                 {imagePreview ? (
-                  <div className="relative rounded-xl overflow-hidden border border-slate-700 max-h-48 mb-3 bg-black">
+                  <div className="relative rounded-xl overflow-hidden border border-slate-700 mb-2 bg-black" style={{ aspectRatio: "16/7" }}>
                     <img
                       src={imagePreview}
                       alt="Pantalla CC358"
-                      className="w-full h-48 object-cover opacity-90"
+                      className="w-full h-full object-contain"
                     />
                     {scanning && (
-                      <div className="absolute inset-0 bg-black/70 backdrop-blur-xs flex flex-col items-center justify-center text-white">
-                        <RefreshCw className="w-7 h-7 text-blue-400 animate-spin mb-2" />
+                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center gap-2">
+                        <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
                         <p className="text-xs font-semibold text-blue-200">{scanStatus}</p>
                       </div>
                     )}
@@ -532,7 +527,7 @@ export default function Home() {
                 ) : (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-7 border-2 border-dashed border-blue-500/50 hover:border-blue-400 bg-blue-500/10 hover:bg-blue-500/15 rounded-xl flex flex-col items-center justify-center gap-2 transition group"
+                    className="w-full py-5 border-2 border-dashed border-blue-500/50 hover:border-blue-400 bg-blue-500/10 hover:bg-blue-500/15 rounded-xl flex items-center justify-center gap-3 transition group"
                   >
                     <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
                       <Camera className="w-6 h-6" />
