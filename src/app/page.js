@@ -15,20 +15,14 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
-  Settings,
   Table,
   Coins,
-  ChevronRight,
-  ExternalLink,
-  Sparkles
+  ChevronRight
 } from "lucide-react";
 
 export default function Home() {
   const [tab, setTab] = useState("scan"); // "scan" | "table"
   const [modoCamara, setModoCamara] = useState("live"); // "live" | "photo"
-  const [apiKey, setApiKey] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
-
   // Estados de video en vivo
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -74,8 +68,6 @@ export default function Home() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    const savedKey = localStorage.getItem("cc358_gemini_key");
-    if (savedKey) setApiKey(savedKey);
     cargarTabla();
   }, []);
 
@@ -134,16 +126,6 @@ export default function Home() {
     const base64Image = canvas.toDataURL("image/jpeg", 0.9);
     setImagePreview(base64Image);
     procesarEscaneo(base64Image);
-  };
-
-  const handleSaveApiKey = (key) => {
-    setApiKey(key);
-    localStorage.setItem("cc358_gemini_key", key);
-    setShowSettings(false);
-    setMensaje({
-      tipo: "success",
-      texto: "🔑 Clave de IA guardada. Ahora el reconocimiento será 100% preciso."
-    });
   };
 
   // Cálculos de totales
@@ -210,7 +192,7 @@ export default function Home() {
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64Image, apiKey })
+        body: JSON.stringify({ image: base64Image })
       });
 
       const data = await res.json();
@@ -219,7 +201,7 @@ export default function Home() {
         setMonedas((prev) => ({ ...prev, ...data.monedas }));
         setMensaje({
           tipo: "success",
-          texto: "🎯 ¡Pantalla leída con 100% de precisión por IA! Revisa abajo."
+          texto: "🎯 ¡Pantalla leída por Gemini AI! Revisa los valores abajo."
         });
         setScanning(false);
         setScanStatus("");
@@ -247,7 +229,7 @@ export default function Home() {
       setMonedas((prev) => ({ ...prev, ...monedasDetectadas }));
       setMensaje({
         tipo: "success",
-        texto: "⚠️ Leído con lector básico. Para 100% de precisión exacta, activa tu clave de IA en Ajustes ⚙️."
+        texto: "⚠️ IA no disponible. Los valores mostrados son una estimación — verifica y ajusta manualmente."
       });
     } catch (err) {
       console.error(err);
@@ -358,15 +340,7 @@ export default function Home() {
           >
             Limpiar
           </button>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition relative"
-          >
-            <Settings className="w-4 h-4" />
-            {!apiKey && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse" />
-            )}
-          </button>
+
         </div>
       </header>
 
@@ -543,21 +517,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* AVISO DE PRECISIÓN DE IA */}
-            {!apiKey && (
-              <div className="bg-amber-950/40 border border-amber-800/60 rounded-xl p-3 flex items-center justify-between text-xs text-amber-300">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Para 100% de precisión exacta en pantallas azules:</span>
-                </div>
-                <button
-                  onClick={() => setShowSettings(true)}
-                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 px-2.5 py-1 rounded-lg font-bold shrink-0 ml-2"
-                >
-                  Activar IA
-                </button>
-              </div>
-            )}
+
 
             {/* 3. TABLA DE MONEDAS DETECTADAS (8 FILAS EXACTAS) */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
@@ -802,67 +762,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* ── MODAL DE CONFIGURACIÓN ── */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="font-bold text-sm text-white flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-400" />
-                Precisión 100% con IA (Gemini)
-              </h2>
-              <button
-                onClick={() => setShowSettings(false)}
-                className="text-slate-400 hover:text-white text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Las pantallas LCD azules con matriz de puntos son difíciles para los lectores tradicionales. Con la clave gratuita de Google Gemini, la IA lee los números con <strong>100% de exactitud</strong>.
-            </p>
-
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-blue-950/60 hover:bg-blue-900/60 border border-blue-800 text-blue-300 text-xs p-2.5 rounded-xl flex items-center justify-between font-semibold transition"
-            >
-              <span>Obtener clave gratis en Google (1 clic)</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-
-            <div>
-              <label className="text-[11px] font-semibold text-slate-400 block mb-1">
-                Pega tu clave aquí:
-              </label>
-              <input
-                type="password"
-                placeholder="AIzaSy..."
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 px-3 text-xs font-mono text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-
-            <div className="flex gap-2 justify-end pt-2">
-              <button
-                onClick={() => setShowSettings(false)}
-                className="text-xs px-3 py-1.5 text-slate-400 hover:text-white"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={() => handleSaveApiKey(apiKey)}
-                className="text-xs px-4 py-2 bg-blue-600 hover:bg-blue-500 font-bold rounded-xl text-white shadow-md shadow-blue-600/30"
-              >
-                Guardar y Activar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }

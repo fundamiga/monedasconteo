@@ -3,21 +3,18 @@ import { NextResponse } from "next/server";
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { image, apiKey } = body;
+    const { image } = body;
 
     if (!image) {
       return NextResponse.json({ error: "No se envió ninguna imagen." }, { status: 400 });
     }
 
-    const geminiKey = apiKey || process.env.GEMINI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
 
     if (!geminiKey) {
       return NextResponse.json(
-        {
-          error:
-            "Falta la clave API de Gemini. Agrégala en Vercel como GEMINI_API_KEY o ingrésala en los ajustes de la app."
-        },
-        { status: 400 }
+        { error: "Falta la variable de entorno GEMINI_API_KEY en Vercel." },
+        { status: 500 }
       );
     }
 
@@ -57,7 +54,7 @@ EJEMPLOS de cómo leer cada fila:
 - Fila que dice: "100   11   1100"  → la CANTIDAD es 11  (NO 1100)
 - Fila que dice: "500    0       0"  → la CANTIDAD es 0
 
-Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de código:
+Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de código markdown:
 {
   "1000": <cantidad fila 1>,
   "200a": <cantidad fila 2>,
@@ -69,8 +66,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de c�
   "50b": <cantidad fila 8>
 }`;
 
-    // gemini-2.0-flash: mejor visión para textos de pantallas LCD
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    // gemini-2.5-pro: el modelo más potente y preciso de Google para visión
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiKey}`;
 
     const payload = {
       contents: [
@@ -101,7 +98,7 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de c�
       const errData = await geminiRes.text();
       console.error("Error Gemini API:", errData);
       return NextResponse.json(
-        { error: `Error de Gemini API (${geminiRes.status}): ${errData}` },
+        { error: `Error Gemini (${geminiRes.status}): ${errData}` },
         { status: 500 }
       );
     }
@@ -109,9 +106,8 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de c�
     const data = await geminiRes.json();
     const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
 
-    console.log("Gemini raw response:", candidateText);
+    console.log("Gemini 2.5 Pro response:", candidateText);
 
-    // Limpiar markdown si vino con ```json
     const cleanedText = candidateText
       .replace(/```json/gi, "")
       .replace(/```/g, "")
@@ -121,9 +117,9 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de c�
     try {
       resultado = JSON.parse(cleanedText);
     } catch (parseErr) {
-      console.error("Error parseando respuesta de Gemini:", cleanedText);
+      console.error("Error parseando respuesta:", cleanedText);
       return NextResponse.json(
-        { error: `No se pudo parsear la respuesta de Gemini: ${cleanedText}` },
+        { error: `Gemini respondió algo inesperado: ${cleanedText}` },
         { status: 500 }
       );
     }
