@@ -173,15 +173,27 @@ class VentanaConteo(ctk.CTkToplevel):
         self.combo_parqueadero.set(PARQUEADEROS[0])
         self.combo_parqueadero.grid(row=0, column=3, padx=(6, 12), pady=8, sticky="ew")
 
-        # Fecha
-        ctk.CTkLabel(frame_datos, text="Fecha:").grid(
+        # Fecha del Recaudo
+        ctk.CTkLabel(frame_datos, text="Fecha Recaudo:").grid(
             row=1, column=0, padx=(12, 6), pady=(0, 8), sticky="w")
-        self.entry_fecha = ctk.CTkEntry(frame_datos, width=120)
-        self.entry_fecha.insert(0, obtener_fecha_hoy())
-        self.entry_fecha.grid(row=1, column=1, padx=6, pady=(0, 8), sticky="w")
-        ctk.CTkLabel(frame_datos, text="(puedes cambiar la fecha si es necesario)",
-                     text_color="#6B7280", font=ctk.CTkFont(size=11)).grid(
-            row=1, column=2, columnspan=2, padx=6, pady=(0, 8), sticky="w")
+
+        f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
+        f_dia.grid(row=1, column=1, columnspan=3, padx=6, pady=(0, 8), sticky="w")
+
+        from datetime import datetime, timedelta
+        ayer_dia = (datetime.now() - timedelta(days=1)).day
+        dias_opciones = [f"Dia {d} (Ayer)" if d == ayer_dia else f"Dia {d} (Hoy)" if d == datetime.now().day else f"Dia {d}" for d in range(1, 32)]
+
+        self.combo_dia = ctk.CTkComboBox(
+            f_dia, values=dias_opciones, width=150,
+            command=self._on_cambio_dia)
+        self.combo_dia.set(f"Dia {ayer_dia} (Ayer)")
+        self.combo_dia.pack(side="left")
+
+        self.lbl_fecha_txt = ctk.CTkLabel(
+            f_dia, text=obtener_fecha_hoy(ayer_dia),
+            text_color="#10B981", font=ctk.CTkFont(weight="bold"))
+        self.lbl_fecha_txt.pack(side="left", padx=10)
 
         # ── Total turno ──
         frame_total = ctk.CTkFrame(self, fg_color="#064E3B", corner_radius=10)
@@ -229,10 +241,24 @@ class VentanaConteo(ctk.CTkToplevel):
         self.lbl_tb.configure(text=fmt_cop(tb))
         self.lbl_total.configure(text=fmt_cop(self._tm + tb))
 
+    def _on_cambio_dia(self, valor):
+        import re
+        m = re.search(r'\d+', valor)
+        if m:
+            dia_num = int(m.group(0))
+            self.lbl_fecha_txt.configure(text=obtener_fecha_hoy(dia_num))
+
+    def _obtener_fecha_final(self):
+        import re
+        txt = self.combo_dia.get()
+        m = re.search(r'\d+', txt)
+        dia_num = int(m.group(0)) if m else None
+        return obtener_fecha_hoy(dia_num)
+
     def _guardar(self):
         trabajador  = self.combo_trabajador.get()
         parqueadero = self.combo_parqueadero.get()
-        fecha       = self.entry_fecha.get().strip()
+        fecha       = self._obtener_fecha_final()
         billetes    = self._leer_billetes()
 
         self.btn_guardar.configure(state="disabled", text="Guardando...")

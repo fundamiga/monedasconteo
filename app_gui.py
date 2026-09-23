@@ -37,7 +37,7 @@ class AppCC358(ctk.CTk):
         self.reader = None
         self.worksheet = None
         self.monedas_actuales = {}
-        self.modo_rapido = False          # Modo ventana emergente automática
+        self.modo_rapido = True          # Modo ventana emergente automática
         self._ventana_abierta = False     # Para no abrir dos ventanas a la vez
         self.ventana_tabla = None         # Ventana opcional de Modo Tabla
 
@@ -85,8 +85,8 @@ class AppCC358(ctk.CTk):
 
         # Botón MODO RÁPIDO (Popup automático)
         self.btn_modo_rapido = ctk.CTkButton(
-            top, text="⚡ Modo Rapido", width=115,
-            fg_color="#B45309", hover_color="#92400E",
+            top, text="⚡ Modo Rapido ON", width=130,
+            fg_color="#D97706", hover_color="#B45309",
             font=ctk.CTkFont(weight="bold"),
             command=self._toggle_modo_rapido)
         self.btn_modo_rapido.pack(side="left", padx=4, pady=10)
