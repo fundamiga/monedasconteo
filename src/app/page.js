@@ -18,7 +18,12 @@ import {
   Table,
   Coins,
   ChevronRight,
-  Calendar
+  Calendar,
+  Search,
+  Check,
+  X,
+  ChevronDown,
+  User
 } from "lucide-react";
 
 export default function Home() {
@@ -75,6 +80,80 @@ export default function Home() {
   // Modo Tabla
   const [tablaHoy, setTablaHoy] = useState([]);
   const [loadingTabla, setLoadingTabla] = useState(false);
+
+  // Búsqueda y selector interactivo de trabajador
+  const [busquedaTrabajador, setBusquedaTrabajador] = useState("");
+  const [dropdownTrabajadorAbierto, setDropdownTrabajadorAbierto] = useState(false);
+  const dropdownRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const getColorForLetter = (letter) => {
+    const colors = [
+      "bg-blue-600 text-blue-100",
+      "bg-emerald-600 text-emerald-100",
+      "bg-amber-600 text-amber-100",
+      "bg-purple-600 text-purple-100",
+      "bg-rose-600 text-rose-100",
+      "bg-cyan-600 text-cyan-100",
+      "bg-indigo-600 text-indigo-100",
+      "bg-teal-600 text-teal-100",
+      "bg-orange-600 text-orange-100",
+      "bg-pink-600 text-pink-100",
+      "bg-sky-600 text-sky-100",
+      "bg-violet-600 text-violet-100"
+    ];
+    if (!letter) return colors[0];
+    const code = letter.toUpperCase().charCodeAt(0);
+    return colors[code % colors.length];
+  };
+
+  const normalizarTexto = (txt) => {
+    return (txt || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  };
+
+  const letrasDisponibles = Array.from(
+    new Set(TRABAJADORES.map((t) => t[0]?.toUpperCase()).filter(Boolean))
+  ).sort();
+
+  const trabajadoresFiltrados = TRABAJADORES.filter((t) => {
+    if (!busquedaTrabajador.trim()) return true;
+    const q = normalizarTexto(busquedaTrabajador);
+    return normalizarTexto(t).includes(q);
+  }).sort((a, b) => {
+    if (!busquedaTrabajador.trim()) return 0;
+    const q = normalizarTexto(busquedaTrabajador);
+    const aStarts = normalizarTexto(a).startsWith(q);
+    const bStarts = normalizarTexto(b).startsWith(q);
+    if (aStarts && !bStarts) return -1;
+    if (!aStarts && bStarts) return 1;
+    return a.localeCompare(b);
+  });
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownTrabajadorAbierto(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("touchstart", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (dropdownTrabajadorAbierto && searchInputRef.current) {
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 60);
+    }
+  }, [dropdownTrabajadorAbierto]);
 
   const fileInputRef = useRef(null);
 
@@ -739,21 +818,205 @@ export default function Home() {
 
             {/* 5. ASIGNACIÓN DE TRABAJADOR Y PARQUEADERO */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-400 block mb-1">
-                  Trabajador:
-                </label>
-                <select
-                  value={trabajador}
-                  onChange={(e) => setTrabajador(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2.5 px-3 text-xs font-medium text-slate-200 focus:outline-none focus:border-blue-500"
+              {/* SELECTOR DE TRABAJADOR CON BÚSQUEDA PREDICTIVA, LETRAS Y COLORES */}
+              <div className="relative" ref={dropdownRef}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Trabajador Responsable:</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium bg-slate-800/80 px-2 py-0.5 rounded-full">
+                    {TRABAJADORES.length} disponibles
+                  </span>
+                </div>
+
+                {/* Botón principal del selector (muestra el trabajador actual con color e inicial) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDropdownTrabajadorAbierto(!dropdownTrabajadorAbierto);
+                    setBusquedaTrabajador("");
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-xl border transition text-left ${
+                    dropdownTrabajadorAbierto
+                      ? "bg-slate-950 border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-500/10"
+                      : "bg-slate-950/90 border-slate-700/80 hover:border-slate-600 active:scale-[0.99]"
+                  }`}
                 >
-                  {TRABAJADORES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                  <div className="flex items-center gap-3 overflow-hidden">
+                    <div
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shadow-md shrink-0 ${getColorForLetter(
+                        trabajador?.[0]
+                      )}`}
+                    >
+                      {trabajador ? trabajador[0] : "?"}
+                    </div>
+                    <div className="truncate">
+                      <span className="text-xs font-bold text-white block truncate">
+                        {trabajador || "Selecciona un trabajador"}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Toca para buscar por letra o escribir nombre
+                      </span>
+                    </div>
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 text-slate-400 shrink-0 ml-2 transition-transform duration-200 ${
+                      dropdownTrabajadorAbierto ? "rotate-180 text-blue-400" : ""
+                    }`}
+                  />
+                </button>
+
+                {/* DROPDOWN FLOTANTE INTERACTIVO */}
+                {dropdownTrabajadorAbierto && (
+                  <div className="absolute z-50 left-0 right-0 mt-2 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl overflow-hidden backdrop-blur-xl">
+                    {/* Barra de búsqueda por texto */}
+                    <div className="p-3 border-b border-slate-800 bg-slate-950/80 space-y-2">
+                      <div className="relative flex items-center">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={busquedaTrabajador}
+                          onChange={(e) => setBusquedaTrabajador(e.target.value)}
+                          placeholder="Escribe una letra o nombre (ej: DI, CAR, C)..."
+                          className="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-9 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        />
+                        {busquedaTrabajador && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBusquedaTrabajador("");
+                              searchInputRef.current?.focus();
+                            }}
+                            className="absolute right-2.5 p-1 rounded-full text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 transition"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Barra de selección rápida por letra inicial con scroll horizontal */}
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => setBusquedaTrabajador("")}
+                          className={`px-2 py-1 rounded-md font-bold text-[10px] shrink-0 transition ${
+                            !busquedaTrabajador
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-800 text-slate-400 hover:text-white"
+                          }`}
+                        >
+                          TODOS
+                        </button>
+                        {letrasDisponibles.map((letra) => {
+                          const activa =
+                            busquedaTrabajador.toUpperCase() === letra;
+                          return (
+                            <button
+                              key={letra}
+                              type="button"
+                              onClick={() => setBusquedaTrabajador(letra)}
+                              className={`w-6 h-6 rounded-md font-bold text-[11px] shrink-0 flex items-center justify-center transition ${
+                                activa
+                                  ? "bg-blue-500 text-white shadow-sm ring-1 ring-white/30"
+                                  : "bg-slate-800/80 text-slate-300 hover:bg-slate-700 hover:text-white"
+                              }`}
+                            >
+                              {letra}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Contador de resultados */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 px-0.5">
+                        <span>
+                          {trabajadoresFiltrados.length === 1
+                            ? "1 trabajador encontrado"
+                            : `${trabajadoresFiltrados.length} trabajadores encontrados`}
+                        </span>
+                        {busquedaTrabajador && (
+                          <span className="text-blue-400 font-medium">
+                            Filtro: "{busquedaTrabajador}"
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Lista con scroll de resultados */}
+                    <div className="max-h-64 overflow-y-auto divide-y divide-slate-800/60 p-1.5 space-y-0.5">
+                      {trabajadoresFiltrados.length === 0 ? (
+                        <div className="py-8 px-4 text-center">
+                          <p className="text-xs text-slate-400 font-medium">
+                            No se encontró nadie con "{busquedaTrabajador}"
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setBusquedaTrabajador("")}
+                            className="mt-2 text-xs text-blue-400 hover:underline font-semibold"
+                          >
+                            Mostrar todos ({TRABAJADORES.length})
+                          </button>
+                        </div>
+                      ) : (
+                        trabajadoresFiltrados.map((t) => {
+                          const isSelected = t === trabajador;
+                          const initial = t[0] || "?";
+                          const badgeColor = getColorForLetter(initial);
+
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                setTrabajador(t);
+                                setDropdownTrabajadorAbierto(false);
+                                setBusquedaTrabajador("");
+                              }}
+                              className={`w-full flex items-center justify-between p-2.5 rounded-xl transition text-left ${
+                                isSelected
+                                  ? "bg-blue-600/20 border border-blue-500/40 text-blue-200"
+                                  : "hover:bg-slate-800/70 text-slate-200"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 overflow-hidden">
+                                <span
+                                  className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 ${badgeColor}`}
+                                >
+                                  {initial}
+                                </span>
+                                <span
+                                  className={`text-xs font-semibold truncate ${
+                                    isSelected
+                                      ? "text-blue-300 font-bold"
+                                      : "text-slate-200"
+                                  }`}
+                                >
+                                  {t}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <Check className="w-4 h-4 text-blue-400 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Botón cerrar al fondo */}
+                    <div className="p-2 bg-slate-950/90 border-t border-slate-800/80 text-center">
+                      <button
+                        type="button"
+                        onClick={() => setDropdownTrabajadorAbierto(false)}
+                        className="text-xs text-slate-400 hover:text-slate-200 font-medium py-1 px-4 rounded-lg bg-slate-800/50 hover:bg-slate-800 transition"
+                      >
+                        Cerrar lista
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
