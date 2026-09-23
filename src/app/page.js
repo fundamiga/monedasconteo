@@ -23,7 +23,9 @@ import {
   Check,
   X,
   ChevronDown,
-  User
+  User,
+  Settings,
+  AlertTriangle
 } from "lucide-react";
 
 export default function Home() {
@@ -62,7 +64,13 @@ export default function Home() {
   });
 
   // Datos del turno
-  const [trabajador, setTrabajador] = useState(TRABAJADORES[0]);
+  // Datos del turno (inicia vacío para exigir selección)
+  const [trabajador, setTrabajador] = useState("");
+  // Opción de auto-limpiar campos tras guardar (Por defecto: ON)
+  const [autoLimpiarAlGuardar, setAutoLimpiarAlGuardar] = useState(true);
+  const [mostrarAjustes, setMostrarAjustes] = useState(false);
+  // Modal de confirmación cuando no hay billetes o recaudo
+  const [alertaGuardar, setAlertaGuardar] = useState(null);
   const [parqueadero, setParqueadero] = useState(PARQUEADEROS[0]);
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState(null);
@@ -360,9 +368,59 @@ export default function Home() {
   };
 
   // ── GUARDAR EN GOOGLE SHEETS ──
-  const handleGuardar = async (filaSeleccionada = null) => {
+  const handleGuardar = async (filaSeleccionada = null, forzar = false) => {
+    // 1. Validar que haya un trabajador seleccionado
+    if (!trabajador || !trabajador.trim()) {
+      setMensaje({
+        tipo: "error",
+        texto: "⚠️ Debes seleccionar a un trabajador antes de guardar el turno."
+      });
+      setDropdownTrabajadorAbierto(true);
+      return;
+    }
+
+    // 2. Alertas preventivas si falta recaudo o billetes (a menos que se fuerce)
+    if (!forzar) {
+      if (totalTurno === 0) {
+        setAlertaGuardar({
+          titulo: "⚠️ Recaudo en $0",
+          mensaje: `El recaudo para "${trabajador}" está en $0 (sin monedas y sin billetes). ¿Deseas registrar este turno en ceros?`,
+          botonConfirmar: "Sí, guardar en ceros",
+          accion: () => ejecutarGuardado(filaSeleccionada)
+        });
+        return;
+      }
+
+      if (totalBilletes === 0) {
+        setAlertaGuardar({
+          titulo: "⚠️ ¿Guardar sin billetes?",
+          mensaje: `Registraste ${fmtCOP(totalMonedas)} en monedas pero NO digitaste ningún billete ($0). ¿Seguro que deseas guardar sin billetes?`,
+          botonConfirmar: "Sí, guardar sin billetes",
+          accion: () => ejecutarGuardado(filaSeleccionada)
+        });
+        return;
+      }
+
+      if (totalMonedas === 0) {
+        setAlertaGuardar({
+          titulo: "⚠️ ¿Guardar sin monedas?",
+          mensaje: `Registraste ${fmtCOP(totalBilletes)} en billetes pero NO hay monedas escaneadas ($0). ¿Seguro que deseas guardar sin monedas?`,
+          botonConfirmar: "Sí, guardar sin monedas",
+          accion: () => ejecutarGuardado(filaSeleccionada)
+        });
+        return;
+      }
+    }
+
+    await ejecutarGuardado(filaSeleccionada);
+  };
+
+  const ejecutarGuardado = async (filaSeleccionada) => {
     setSaving(true);
     setMensaje(null);
+
+    const trabajadorGuardado = trabajador;
+    const totalGuardado = totalTurno;
 
     try {
       const res = await fetch("/api/save", {
@@ -370,7 +428,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fila: filaSeleccionada,
-          trabajador,
+          trabajador: trabajadorGuardado,
           parqueadero,
           dia: diaSeleccionado,
           hoja: hojaSeleccionada,
@@ -387,10 +445,36 @@ export default function Home() {
 
       setMensaje({
         tipo: "success",
-        texto: `🎉 ¡Guardado con éxito en fila ${data.fila}! Total: ${fmtCOP(totalTurno)}`
+        texto: `🎉 ¡Guardado en fila ${data.fila} para ${trabajadorGuardado}! Total: ${fmtCOP(totalGuardado)}${
+          autoLimpiarAlGuardar ? " — Formulario limpiado para el siguiente turno." : ""
+        }`
       });
 
       cargarTabla();
+
+      // AUTO-LIMPIAR CAMPOS SI ESTÁ ACTIVADO (POR DEFECTO TRUE)
+      if (autoLimpiarAlGuardar) {
+        setMonedas({
+          1000: 0,
+          "200a": 0,
+          500: 0,
+          "100a": 0,
+          "200b": 0,
+          "50a": 0,
+          "100b": 0,
+          "50b": 0
+        });
+        setBilletes({
+          2000: 0,
+          5000: 0,
+          10000: 0,
+          20000: 0,
+          50000: 0,
+          100000: 0
+        });
+        setImagePreview(null);
+        setTrabajador(""); // Se quita la persona para no confundir al siguiente turno
+      }
     } catch (err) {
       console.error(err);
       setMensaje({ tipo: "error", texto: `Error al guardar: ${err.message}` });
@@ -415,7 +499,7 @@ export default function Home() {
     }
   };
 
-  const limpiarTodo = () => {
+  const limpiarTodo = (limpiarPersona = true) => {
     setMonedas({
       1000: 0,
       "200a": 0,
@@ -435,32 +519,93 @@ export default function Home() {
       100000: 0
     });
     setImagePreview(null);
+    if (limpiarPersona) {
+      setTrabajador("");
+    }
     setMensaje(null);
   };
 
   return (
     <main className="max-w-md mx-auto min-h-screen pb-20 flex flex-col justify-between">
       {/* ── CABECERA SUPERIOR ── */}
-      <header className="sticky top-0 z-30 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400">
-            <Coins className="w-5 h-5" />
+      <header className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400">
+              <Coins className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="font-bold text-sm tracking-tight text-white">Recaudo CC358</h1>
+              <p className="text-[11px] text-slate-400">Google Sheets Móvil</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-sm tracking-tight text-white">Recaudo CC358</h1>
-            <p className="text-[11px] text-slate-400">Google Sheets Móvil</p>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => limpiarTodo(true)}
+              className="text-xs bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 px-2.5 py-1.5 rounded-lg font-medium transition"
+              title="Limpiar formulario"
+            >
+              Limpiar
+            </button>
+
+            {/* BOTÓN DE AJUSTES OCULTO (No ocupa espacio en pantalla) */}
+            <button
+              type="button"
+              onClick={() => setMostrarAjustes(!mostrarAjustes)}
+              className={`p-1.5 rounded-lg border transition ${
+                mostrarAjustes
+                  ? "bg-blue-600 border-blue-500 text-white shadow-sm"
+                  : "bg-slate-800 border-slate-700 text-slate-400 hover:text-white"
+              }`}
+              title="Ajustes de limpieza automática"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={limpiarTodo}
-            className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg font-medium transition"
-          >
-            Limpiar
-          </button>
+        {/* PANEL DESPLEGABLE OCULTO (Solo aparece al presionar el engranaje ⚙️) */}
+        {mostrarAjustes && (
+          <div className="mt-3 pt-3 border-t border-slate-800/80 animate-in fade-in duration-150">
+            <div className="bg-slate-950/90 border border-slate-800 rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-bold text-slate-200 block">
+                    Auto-limpiar al guardar
+                  </span>
+                  <span className="text-[10px] text-slate-400 block leading-tight mt-0.5">
+                    Borra monedas, billetes y trabajador al guardar para no confundir con el siguiente turno.
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAutoLimpiarAlGuardar(!autoLimpiarAlGuardar)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    autoLimpiarAlGuardar ? "bg-emerald-600" : "bg-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      autoLimpiarAlGuardar ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
 
-        </div>
+              <div className="text-[10px] text-emerald-400 font-medium pt-1.5 border-t border-slate-800/60 flex items-center justify-between">
+                <span>Estado: {autoLimpiarAlGuardar ? "ACTIVADO (Por defecto)" : "DESACTIVADO (Mantiene datos)"}</span>
+                <button
+                  type="button"
+                  onClick={() => setMostrarAjustes(false)}
+                  className="text-slate-400 hover:text-slate-200 underline"
+                >
+                  Ocultar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── SELECTOR DE MODOS PRINCIPALES (TABS) ── */}
@@ -845,18 +990,20 @@ export default function Home() {
                 >
                   <div className="flex items-center gap-3 overflow-hidden">
                     <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shadow-md shrink-0 ${getColorForLetter(
-                        trabajador?.[0]
-                      )}`}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-sm shadow-md shrink-0 ${
+                        trabajador
+                          ? getColorForLetter(trabajador[0])
+                          : "bg-slate-800 border border-slate-700 text-slate-400"
+                      }`}
                     >
                       {trabajador ? trabajador[0] : "?"}
                     </div>
                     <div className="truncate">
-                      <span className="text-xs font-bold text-white block truncate">
-                        {trabajador || "Selecciona un trabajador"}
+                      <span className={`text-xs block truncate ${trabajador ? "font-bold text-white" : "font-semibold text-amber-400"}`}>
+                        {trabajador || "⚠️ Selecciona un trabajador..."}
                       </span>
                       <span className="text-[10px] text-slate-400">
-                        Toca para buscar por letra o escribir nombre
+                        {trabajador ? "Toca para cambiar o buscar por letra" : "Toca aquí para buscar y asignar"}
                       </span>
                     </div>
                   </div>
@@ -1165,6 +1312,66 @@ export default function Home() {
         )}
       </div>
 
+          {/* MODAL DE ALERTA CUANDO FALTA RECAUDO O BILLETES */}
+      {alertaGuardar && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">
+                  {alertaGuardar.titulo}
+                </h3>
+                <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                  {alertaGuardar.mensaje}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/70 rounded-xl p-3 border border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-slate-400">
+                <span>Trabajador:</span>
+                <span className="font-bold text-slate-200">{trabajador || "No asignado"}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Monedas:</span>
+                <span className="font-semibold text-emerald-400">{fmtCOP(totalMonedas)}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Billetes:</span>
+                <span className="font-semibold text-amber-400">{fmtCOP(totalBilletes)}</span>
+              </div>
+              <div className="flex justify-between pt-1.5 border-t border-slate-800 text-white font-bold">
+                <span>Total Turno:</span>
+                <span className="text-emerald-400">{fmtCOP(totalTurno)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setAlertaGuardar(null)}
+                className="flex-1 py-2.5 px-3 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold rounded-xl transition"
+              >
+                Volver y corregir
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const accion = alertaGuardar.accion;
+                  setAlertaGuardar(null);
+                  if (accion) accion();
+                }}
+                className="flex-1 py-2.5 px-3 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-amber-600/30"
+              >
+                {alertaGuardar.botonConfirmar || "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
