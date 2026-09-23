@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Table,
   Coins,
-  ChevronRight
+  ChevronRight,
+  Calendar
 } from "lucide-react";
 
 export default function Home() {
@@ -61,6 +62,13 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
+  // Control de Fecha / Día del recaudo (Por defecto: día anterior)
+  const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
+    const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return ayer.getDate();
+  });
+  const [fechaSheet, setFechaSheet] = useState("");
+
   // Modo Tabla
   const [tablaHoy, setTablaHoy] = useState([]);
   const [loadingTabla, setLoadingTabla] = useState(false);
@@ -68,8 +76,8 @@ export default function Home() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    cargarTabla();
-  }, []);
+    cargarTabla(diaSeleccionado);
+  }, [diaSeleccionado]);
 
   // Manejo de la cámara en vivo
   useEffect(() => {
@@ -258,6 +266,7 @@ export default function Home() {
           fila: filaSeleccionada,
           trabajador,
           parqueadero,
+          dia: diaSeleccionado,
           monedas,
           billetes
         })
@@ -283,13 +292,14 @@ export default function Home() {
     }
   };
 
-  const cargarTabla = async () => {
+  const cargarTabla = async (dia = diaSeleccionado) => {
     setLoadingTabla(true);
     try {
-      const res = await fetch("/api/today");
+      const res = await fetch(`/api/today?dia=${dia}`);
       const data = await res.json();
       if (data.datos) {
         setTablaHoy(data.datos);
+        if (data.fecha) setFechaSheet(data.fecha);
       }
     } catch (err) {
       console.error("Error al cargar tabla:", err);
@@ -373,6 +383,49 @@ export default function Home() {
           </button>
         </div>
       </div>
+      {/* ── SELECTOR DE DÍA DE RECAUDO ── */}
+      <div className="px-4 pt-2">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-500/20 p-1.5 rounded-lg text-blue-400">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-[11px] font-bold text-slate-300 block">
+                Fecha del Recaudo:
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {diaSeleccionado === new Date(Date.now() - 24 * 60 * 60 * 1000).getDate()
+                  ? "Día anterior (por defecto)"
+                  : diaSeleccionado === new Date().getDate()
+                  ? "Día de hoy"
+                  : `Día ${diaSeleccionado}`}
+                {fechaSheet ? ` • ${fechaSheet}` : ""}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <label className="text-[11px] text-slate-400 font-medium">Día:</label>
+            <select
+              value={diaSeleccionado}
+              onChange={(e) => setDiaSeleccionado(parseInt(e.target.value, 10))}
+              className="bg-slate-950 border border-slate-700 text-blue-400 font-bold text-xs py-1 px-2.5 rounded-lg focus:outline-none focus:border-blue-500 cursor-pointer"
+            >
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => {
+                const esAyer = d === new Date(Date.now() - 24 * 60 * 60 * 1000).getDate();
+                const esHoy = d === new Date().getDate();
+                return (
+                  <option key={d} value={d}>
+                    Día {d} {esAyer ? "(Ayer)" : esHoy ? "(Hoy)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+        </div>
+      </div>
+
 
       {/* ── NOTIFICACIONES FLOTANTES ── */}
       {mensaje && (

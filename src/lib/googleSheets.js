@@ -1,31 +1,36 @@
 import { google } from "googleapis";
-import fs from "fs";
-import path from "path";
-import { ID_SHEET, GID_SHEET, PARQUEADEROS } from "./constants";
+import { ID_SHEET, PARQUEADEROS } from "./constants";
 
+/**
+ * Obtiene el cliente autenticado de Google Sheets
+ */
 export function getGoogleAuth() {
-  let credentials = null;
+  let credentials;
 
-  // 1. Intentar variable de entorno en Vercel
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     try {
       credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
     } catch (e) {
-      console.error("Error al parsear GOOGLE_SERVICE_ACCOUNT_KEY:", e);
+      console.error("Error parseando GOOGLE_SERVICE_ACCOUNT_KEY:", e);
     }
   }
 
-  // 2. Si no hay variable, buscar archivo local config/credentials.json
   if (!credentials) {
-    const localPath = path.join(process.cwd(), "config", "credentials.json");
-    if (fs.existsSync(localPath)) {
-      credentials = JSON.parse(fs.readFileSync(localPath, "utf-8"));
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const credsPath = path.join(process.cwd(), "config", "credentials.json");
+      if (fs.existsSync(credsPath)) {
+        credentials = JSON.parse(fs.readFileSync(credsPath, "utf8"));
+      }
+    } catch (e) {
+      console.error("Error leyendo credentials.json local:", e);
     }
   }
 
   if (!credentials) {
     throw new Error(
-      "No se encontraron credenciales de Google Sheets. Configura GOOGLE_SERVICE_ACCOUNT_KEY en Vercel o config/credentials.json localmente."
+      "No se encontraron credenciales de Google Service Account. Configura GOOGLE_SERVICE_ACCOUNT_KEY."
     );
   }
 
@@ -52,9 +57,10 @@ export function normalizar(str) {
 }
 
 /**
- * Retorna las filas del día actual organizadas por parqueadero
+ * Retorna las filas de una fecha específica (o del día anterior por defecto) organizadas por parqueadero
+ * @param {number|string} diaParam - Número del día del mes (1 al 31)
  */
-export async function obtenerEstructuraHoy() {
+export async function obtenerEstructuraDia(diaParam = null) {
   const sheets = await getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: ID_SHEET,
@@ -62,20 +68,37 @@ export async function obtenerEstructuraHoy() {
   });
 
   const valores = res.data.values || [];
-  const diaHoy = new Date().getDate().toString();
 
+  // Si no se especifica día, tomar por defecto el DÍA ANTERIOR
+  let diaTarget = parseInt(diaParam, 10);
+  if (isNaN(diaTarget) || diaTarget < 1 || diaTarget > 31) {
+    const ahora = new Date();
+    // Restar 1 día para ir por default al día anterior
+    const ayer = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
+    diaTarget = ayer.getDate();
+  }
+
+  // Buscar la fila de encabezado de fecha exacta para ese día (ej: "22/2/2026" o "02/02/2026")
   let inicio = -1;
+  let fechaEncontrada = "";
+
   for (let i = 0; i < valores.length; i++) {
     const celda = (valores[i][0] || "").toString().trim();
-    if (celda.startsWith(diaHoy) && celda.includes("/")) {
-      inicio = i;
-      break;
+    if (celda.includes("/")) {
+      const partes = celda.split("/");
+      const diaCelda = parseInt(partes[0], 10);
+      if (diaCelda === diaTarget) {
+        inicio = i;
+        fechaEncontrada = celda;
+        break;
+      }
     }
   }
 
   if (inicio === -1) {
-    // Si no encuentra el día de hoy, tomar la fila 1378 (18/2/2026) como referencia
+    // Si no encuentra la fecha exacta, tomar fila 1378 como fallback
     inicio = 1377;
+    fechaEncontrada = `Día ${diaTarget}`;
   }
 
   const parquesNorm = PARQUEADEROS.map(normalizar);
@@ -85,6 +108,11 @@ export async function obtenerEstructuraHoy() {
   for (let i = inicio; i < Math.min(inicio + 95, valores.length); i++) {
     const row = valores[i] || [];
     const celdaA = normalizar(row[0]);
+
+    // Si encontramos otra celda con fecha posterior a la de inicio, paramos la sección del día
+    if (i > inicio && (row[0] || "").toString().trim().includes("/") && !parquesNorm.includes(celdaA)) {
+      break;
+    }
 
     if (parquesNorm.includes(celdaA)) {
       actualParque = { parqueadero: row[0].trim(), filas: [] };
@@ -111,7 +139,17 @@ export async function obtenerEstructuraHoy() {
     }
   }
 
-  return datos;
+  return {
+    dia: diaTarget,
+    fecha: fechaEncontrada,
+    datos
+  };
+}
+
+// Compatibilidad
+export async function obtenerEstructuraHoy() {
+  const result = await obtenerEstructuraDia();
+  return result.datos;
 }
 
 /**

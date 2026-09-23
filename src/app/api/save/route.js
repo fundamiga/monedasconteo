@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { guardarFilaSheet, obtenerEstructuraHoy, normalizar } from "@/lib/googleSheets";
+import { guardarFilaSheet, obtenerEstructuraDia, normalizar } from "@/lib/googleSheets";
 
 export async function POST(req) {
   try {
     const body = await req.json();
-    let { fila, trabajador, parqueadero, monedas = {}, billetes = {} } = body;
+    let { fila, trabajador, parqueadero, dia, monedas = {}, billetes = {} } = body;
 
-    // Si no se proporcionó el número de fila exacto, buscarlo
+    // Si no se proporcionó el número de fila exacto, buscarlo en la estructura del día seleccionado
     if (!fila) {
-      const estructura = await obtenerEstructuraHoy();
+      const resEstructura = await obtenerEstructuraDia(dia);
+      const estructura = resEstructura.datos || [];
       const pNorm = normalizar(parqueadero);
       const tNorm = normalizar(trabajador);
 
@@ -34,7 +35,7 @@ export async function POST(req) {
 
       if (!fila) {
         return NextResponse.json(
-          { error: `No se encontró espacio disponible para ${trabajador} en ${parqueadero}.` },
+          { error: `No se encontró espacio disponible para ${trabajador} en ${parqueadero} (${resEstructura.fecha || "Día " + dia}).` },
           { status: 400 }
         );
       }
