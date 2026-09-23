@@ -177,8 +177,8 @@ class AppCC358(ctk.CTk):
         seleccion.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(seleccion, text="Trabajador:").grid(row=0, column=0, sticky="w", pady=3)
-        self.combo_trabajador = ctk.CTkComboBox(
-            seleccion, values=TRABAJADORES, width=280)
+        self.combo_trabajador = SelectorTrabajador(
+            seleccion, width=280)
         self.combo_trabajador.set(TRABAJADORES[0])
         self.combo_trabajador.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=3)
 

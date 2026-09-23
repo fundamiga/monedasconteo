@@ -8,6 +8,7 @@ import customtkinter as ctk
 from datetime import datetime
 
 from config.datos import TRABAJADORES, PARQUEADEROS
+from selector_trabajador import SelectorTrabajador
 from sheets.google_sheets import (
     conectar_sheet, buscar_fila_trabajador, guardar_conteo,
     calcular_totales, obtener_fecha_hoy, escribir_nombre_trabajador
@@ -31,7 +32,7 @@ class VentanaConteo(ctk.CTkToplevel):
         self.callback_cerrar = callback_cerrar
 
         self.title("Nuevo Conteo CC358")
-        self.geometry("640x560")
+        self.geometry("650x575")
         self.resizable(False, False)
         self.attributes("-topmost", True)  # Siempre encima
 
@@ -160,8 +161,8 @@ class VentanaConteo(ctk.CTkToplevel):
         # Trabajador
         ctk.CTkLabel(frame_datos, text="Trabajador:").grid(
             row=0, column=0, padx=(12, 6), pady=8, sticky="w")
-        self.combo_trabajador = ctk.CTkComboBox(
-            frame_datos, values=TRABAJADORES, width=220)
+        self.combo_trabajador = SelectorTrabajador(
+            frame_datos, width=240)
         self.combo_trabajador.set(TRABAJADORES[0])
         self.combo_trabajador.grid(row=0, column=1, padx=6, pady=8, sticky="ew")
 
