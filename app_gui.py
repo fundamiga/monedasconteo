@@ -9,6 +9,7 @@ import serial.tools.list_ports
 from datetime import datetime
 
 from config.datos import TRABAJADORES, PARQUEADEROS
+from selector_trabajador import SelectorTrabajador
 from serial_reader.cc358_reader import CC358Reader
 from sheets.google_sheets import (
     conectar_sheet, buscar_fila_trabajador,
