@@ -30,34 +30,19 @@ export async function POST(req) {
       if (match) mimeType = match[1];
     }
 
-    const prompt = `Observa detalladamente la pantalla LCD azul de esta contadora de monedas SAT CC358.
-Muestra una tabla con 8 renglones fijos y 3 columnas:
-- Columna 1: denominación de la moneda
-- Columna 2 (CENTRAL): CANTIDAD de monedas contadas (este es el dato exacto que necesito)
-- Columna 3: subtotal en pesos
-
-Los 8 renglones en orden de arriba hacia abajo corresponden a:
+    const prompt = `Pantalla LCD azul contadora monedas SAT CC358 (8 filas x 3 columnas).
+Columna central = CANTIDAD de monedas (extrae SOLO este número).
+Filas en orden:
 1. 1K ($1000)
-2. 200 (primera fila de $200) -> 200a
+2. 200 ($200 tipo A)
 3. 500 ($500)
-4. 100 (primera fila de $100) -> 100a
-5. 200 (segunda fila de $200) -> 200b
-6. 50 (primera fila de $50) -> 50a
-7. 100 (segunda fila de $100) -> 100b
-8. 50 (segunda fila de $50) -> 50b
+4. 100 ($100 tipo A)
+5. 200 ($200 tipo B)
+6. 50 ($50 tipo A)
+7. 100 ($100 tipo B)
+8. 50 ($50 tipo B)
 
-Ejemplo de cómo leer la pantalla:
-1 K:      1      1000   -> cantidad = 1
-200:      0         0   -> cantidad = 0
-500:      2      1000   -> cantidad = 2
-100:     11      1100   -> cantidad = 11
-200:      7      1400   -> cantidad = 7
-50:      69      3450   -> cantidad = 69
-100:     25      2500   -> cantidad = 25
-50:       1        50   -> cantidad = 1
-
-Extrae con precisión milimétrica las 8 cantidades (columna central). Si una fila tiene 0 o está vacía pon 0.
-Responde ÚNICAMENTE un JSON válido con este formato:
+Responde ÚNICAMENTE en JSON:
 {
   "1000": 0,
   "200a": 0,
@@ -84,15 +69,17 @@ Responde ÚNICAMENTE un JSON válido con este formato:
         }
       ],
       generationConfig: {
-        temperature: 0.0
+        temperature: 0.0,
+        thinkingConfig: {
+          thinkingBudget: 0
+        }
       }
     };
 
-    // Lista de modelos disponibles en orden de prioridad
+    // Modelos en orden: el más rápido con thinkingBudget=0 primero
     const modelos = [
-      "gemini-3.5-flash",
       "gemini-3.6-flash",
-      "gemini-3.5-flash-lite",
+      "gemini-3.5-flash",
       "gemini-3-flash-preview"
     ];
 
@@ -133,9 +120,9 @@ Responde ÚNICAMENTE un JSON válido con este formato:
     }
 
     const candidateText = geminiRes?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-    console.log(`Respuesta exitosa de ${modeloExitoso}:`, candidateText);
+    console.log(`Respuesta de ${modeloExitoso}:`, candidateText);
 
-    // Limpiar markdown tipo ```json ... ```
+    // Limpiar markdown
     const cleanedText = candidateText
       .replace(/```json/gi, "")
       .replace(/```/g, "")
@@ -145,14 +132,13 @@ Responde ÚNICAMENTE un JSON válido con este formato:
     const matchJson = cleanedText.match(/\{[\s\S]*\}/);
     if (!matchJson) {
       return NextResponse.json(
-        { error: `Respuesta de IA no contiene JSON válido: ${candidateText}` },
+        { error: `Respuesta sin JSON válido: ${candidateText}` },
         { status: 500 }
       );
     }
 
     const resultado = JSON.parse(matchJson[0]);
 
-    // Asegurar que todos los valores sean numéricos
     const monedasLimpias = {
       "1000": parseInt(resultado["1000"], 10) || 0,
       "200a": parseInt(resultado["200a"], 10) || 0,

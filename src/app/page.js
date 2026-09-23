@@ -127,11 +127,15 @@ export default function Home() {
     if (!videoRef.current || !canvasRef.current) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    const vw = video.videoWidth || 640;
+    const vh = video.videoHeight || 480;
+    const maxW = 720;
+    const scale = Math.min(1, maxW / vw);
+    canvas.width = Math.round(vw * scale);
+    canvas.height = Math.round(vh * scale);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const base64Image = canvas.toDataURL("image/jpeg", 0.9);
+    const base64Image = canvas.toDataURL("image/jpeg", 0.82);
     setImagePreview(base64Image);
     procesarEscaneo(base64Image);
   };
@@ -152,13 +156,33 @@ export default function Home() {
   const fmtCOP = (val) => `$ ${val.toLocaleString("es-CO")}`;
 
   // ── MANEJO DE FOTO Y ESCANEO ──
+  const comprimirImagen = (dataUrl, maxWidth = 960, quality = 0.82) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxWidth / img.width);
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(c.toDataURL("image/jpeg", quality));
+      };
+      img.src = dataUrl;
+    });
+  };
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
-      const base64Image = evt.target.result;
+      const original = evt.target.result;
+      // Comprimir antes de enviar para escaneo ultra-rápido
+      const base64Image = await comprimirImagen(original, 960, 0.82);
       setImagePreview(base64Image);
       await procesarEscaneo(base64Image);
     };
