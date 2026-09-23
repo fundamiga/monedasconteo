@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { ID_SHEET, PARQUEADEROS } from "./constants";
+import { SHEETS, PARQUEADEROS } from "./constants";
 
 /**
  * Obtiene el cliente autenticado de Google Sheets
@@ -57,14 +57,25 @@ export function normalizar(str) {
 }
 
 /**
+ * Obtiene la configuración del Google Sheet a usar (pruebas o principal)
+ */
+export function obtenerConfigSheet(tipo = "pruebas") {
+  const clave = tipo?.toLowerCase() === "principal" ? "principal" : "pruebas";
+  return SHEETS[clave] || SHEETS["pruebas"];
+}
+
+/**
  * Retorna las filas de una fecha específica (o del día anterior por defecto) organizadas por parqueadero
  * @param {number|string} diaParam - Número del día del mes (1 al 31)
+ * @param {string} hojaTipo - "pruebas" o "principal"
  */
-export async function obtenerEstructuraDia(diaParam = null) {
+export async function obtenerEstructuraDia(diaParam = null, hojaTipo = "pruebas") {
   const sheets = await getSheetsClient();
+  const config = obtenerConfigSheet(hojaTipo);
+
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: ID_SHEET,
-    range: "SEPTIEMBRE 2026!A1:S2500"
+    spreadsheetId: config.id,
+    range: `${config.sheet_name}!A1:S2500`
   });
 
   const valores = res.data.values || [];
@@ -73,7 +84,6 @@ export async function obtenerEstructuraDia(diaParam = null) {
   let diaTarget = parseInt(diaParam, 10);
   if (isNaN(diaTarget) || diaTarget < 1 || diaTarget > 31) {
     const ahora = new Date();
-    // Restar 1 día para ir por default al día anterior
     const ayer = new Date(ahora.getTime() - 24 * 60 * 60 * 1000);
     diaTarget = ayer.getDate();
   }
@@ -96,7 +106,6 @@ export async function obtenerEstructuraDia(diaParam = null) {
   }
 
   if (inicio === -1) {
-    // Si no encuentra la fecha exacta, tomar fila 1378 como fallback
     inicio = 1377;
     fechaEncontrada = `Día ${diaTarget}`;
   }
@@ -109,7 +118,6 @@ export async function obtenerEstructuraDia(diaParam = null) {
     const row = valores[i] || [];
     const celdaA = normalizar(row[0]);
 
-    // Si encontramos otra celda con fecha posterior a la de inicio, paramos la sección del día
     if (i > inicio && (row[0] || "").toString().trim().includes("/") && !parquesNorm.includes(celdaA)) {
       break;
     }
@@ -142,11 +150,12 @@ export async function obtenerEstructuraDia(diaParam = null) {
   return {
     dia: diaTarget,
     fecha: fechaEncontrada,
+    hoja: hojaTipo,
+    nombreHoja: config.nombre,
     datos
   };
 }
 
-// Compatibilidad
 export async function obtenerEstructuraHoy() {
   const result = await obtenerEstructuraDia();
   return result.datos;
@@ -155,9 +164,10 @@ export async function obtenerEstructuraHoy() {
 /**
  * Guarda los conteos en la fila correspondiente de Google Sheets
  */
-export async function guardarFilaSheet({ fila, trabajador, monedas = {}, billetes = {} }) {
+export async function guardarFilaSheet({ fila, trabajador, monedas = {}, billetes = {}, hojaTipo = "pruebas" }) {
   const sheets = await getSheetsClient();
-  const sheetName = "SEPTIEMBRE 2026";
+  const config = obtenerConfigSheet(hojaTipo);
+  const sheetName = config.sheet_name;
 
   const num = (v) => {
     const val = parseInt(v, 10);
@@ -193,7 +203,6 @@ export async function guardarFilaSheet({ fila, trabajador, monedas = {}, billete
     }
   ];
 
-  // Si se envió nombre de trabajador, actualizar columna A
   if (trabajador) {
     updates.unshift({
       range: `${sheetName}!A${fila}`,
@@ -202,12 +211,12 @@ export async function guardarFilaSheet({ fila, trabajador, monedas = {}, billete
   }
 
   await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: ID_SHEET,
+    spreadsheetId: config.id,
     requestBody: {
       valueInputOption: "USER_ENTERED",
       data: updates
     }
   });
 
-  return { success: true, fila };
+  return { success: true, fila, hoja: hojaTipo };
 }

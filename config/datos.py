@@ -17,22 +17,38 @@ PARQUEADEROS = [
 ]
 
 TRABAJADORES = sorted([
+    "ADRIAN  OROZCO",
+    "ALBA MARY  MARMOLEJO",
+    "ALEXANDER RIVAS",
+    "ANA  GOMEZ",
     "ANGELA MARIA RAMIREZ",
+    "AYDE  GOMEZ",
+    "CAMILO",
+    "CARLOS ALBERTO  ORDOÑEZ",
+    "CARLOS ANDRES QUICENO",
     "CARLOS GALARZA",
+    "CESAR  CASTRO",
+    "CRISTIAN CAMILO  AGUDELO",
+    "CRISTIAN YAIR  TELLEZ",
+    "DARIO DIAZ",
+    "DEYSY MORA",
     "DIANA CAROLINA ARIAS",
     "DIANA RIASCOS",
     "DONELA GARZON",
     "EIDER PABON",
     "EMILSEN MAYORGA",
     "ESTEBAN ARIAS",
+    "FABIAN  CARMONA",
     "FRANCISCO LOPEZ",
     "FREDDY OSPINA",
     "GILDARDO MOSCOSO",
     "GLORIA CATALINA PALACIOS",
     "GLORIA TERESA URBANO",
     "GUILLERMO DOMINGUEZ",
+    "GUSTAVO  SANDOVAL",
+    "HAROLD  CASTRO",
     "HIROSHI TAKATA",
-    "ISABELA BERMUDEZ",
+    "ISABELA  BERMUDEZ",
     "ISABELLA GOMEZ",
     "JHON JAIRO CASTAÑEDA",
     "JOHAN GRANADA",
@@ -43,6 +59,7 @@ TRABAJADORES = sorted([
     "JOSE LAME",
     "JOSE LEONEL OSPINA",
     "JOSE TELMO OSPINA",
+    "JUAN ALQUIBER ARCILA",
     "JUAN CARLOS BECERRA",
     "JULIAN ARBOLEDA",
     "LUIS CARLOS SUAREZ",
@@ -61,8 +78,6 @@ TRABAJADORES = sorted([
 ])
 
 # Columnas del Google Sheet (índice base 1 para gspread)
-# Columna A=1 = Nombre trabajador
-# Columnas de MONEDAS:
 COL_MONEDA_1000   = 3   # C
 COL_MONEDA_200A   = 4   # D  ($200 tipo 1)
 COL_MONEDA_500    = 5   # E
@@ -83,12 +98,22 @@ COL_BILLETE_100000 = 17  # Q
 COL_TOTAL_BILLETES = 18  # R
 COL_TOTAL_TURNO    = 19  # S
 
-# Nombre del Google Sheet (exactamente como aparece en Drive)
-NOMBRE_SHEET = "Recaudo Parqueaderos"  # ← Cámbialo si tiene otro nombre
+# Configuración de Hojas de Google Sheets
+SHEETS_CONFIG = {
+    "pruebas": {
+        "nombre": "Pruebas (Copia)",
+        "id": "1LDcd54KEzxy02zQHyPMUHPUNoKIlAZZL7p_T7cFQ4oA",
+        "gid": "1508532602",
+        "sheet_name": "SEPTIEMBRE 2026"
+    },
+    "principal": {
+        "nombre": "INGRESOS DIARIOS (Principal)",
+        "id": "1oRStHtTlQyTZoE0JHZ3waKjmX8j7Bt4646ufflnprNY",
+        "gid": "61264833",
+        "sheet_name": "SEPTIEMBRE 2026"
+    }
+}
 
-# ID del Google Sheet (de la URL)
-ID_SHEET = "1LDcd54KEzxy02zQHyPMUHPUNoKIlAZZL7p_T7cFQ4oA"
-GID_SHEET = "1508532602"  # SEPTIEMBRE 2026
-
-# El Sheet usa formato de fecha: DD/2/YYYY (mes fijo en el template)
-# No necesita diccionario de meses
+# Compatibilidad hacia atrás
+ID_SHEET = SHEETS_CONFIG["pruebas"]["id"]
+GID_SHEET = SHEETS_CONFIG["pruebas"]["gid"]

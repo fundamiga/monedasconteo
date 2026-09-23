@@ -62,6 +62,9 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
+  // Selección de Hoja de Cálculo: 'pruebas' o 'principal'
+  const [hojaSeleccionada, setHojaSeleccionada] = useState("pruebas");
+
   // Control de Fecha / Día del recaudo (Por defecto: día anterior)
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
     const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -76,8 +79,8 @@ export default function Home() {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    cargarTabla(diaSeleccionado);
-  }, [diaSeleccionado]);
+    cargarTabla(diaSeleccionado, hojaSeleccionada);
+  }, [diaSeleccionado, hojaSeleccionada]);
 
   // Manejo de la cámara en vivo
   useEffect(() => {
@@ -291,6 +294,7 @@ export default function Home() {
           trabajador,
           parqueadero,
           dia: diaSeleccionado,
+          hoja: hojaSeleccionada,
           monedas,
           billetes
         })
@@ -316,10 +320,10 @@ export default function Home() {
     }
   };
 
-  const cargarTabla = async (dia = diaSeleccionado) => {
+  const cargarTabla = async (dia = diaSeleccionado, hoja = hojaSeleccionada) => {
     setLoadingTabla(true);
     try {
-      const res = await fetch(`/api/today?dia=${dia}`);
+      const res = await fetch(`/api/today?dia=${dia}&hoja=${hoja}`);
       const data = await res.json();
       if (data.datos) {
         setTablaHoy(data.datos);
@@ -407,6 +411,52 @@ export default function Home() {
           </button>
         </div>
       </div>
+            {/* ── SELECTOR DE DESTINO: PRUEBAS vs PRINCIPAL ── */}
+      <div className="px-4 pt-2">
+        <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-colors ${
+          hojaSeleccionada === "principal"
+            ? "bg-amber-950/40 border-amber-600/70 text-amber-200"
+            : "bg-slate-900/90 border-slate-800 text-slate-300"
+        }`}>
+          <div className="flex items-center gap-2">
+            <span className={`w-2.5 h-2.5 rounded-full ${
+              hojaSeleccionada === "principal" ? "bg-amber-400 animate-pulse" : "bg-emerald-400"
+            }`} />
+            <div>
+              <span className="text-[11px] font-bold block">
+                {hojaSeleccionada === "principal" ? "⚠️ HOJA PRINCIPAL (PRODUCCIÓN)" : "📁 Hoja de Pruebas"}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                {hojaSeleccionada === "principal" ? "Ingresos Diarios Corregido" : "Copia segura para pruebas"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+            <button
+              onClick={() => setHojaSeleccionada("pruebas")}
+              className={`px-2.5 py-1 rounded-md font-bold transition ${
+                hojaSeleccionada === "pruebas"
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Pruebas
+            </button>
+            <button
+              onClick={() => setHojaSeleccionada("principal")}
+              className={`px-2.5 py-1 rounded-md font-bold transition ${
+                hojaSeleccionada === "principal"
+                  ? "bg-amber-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Principal
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ── SELECTOR DE DÍA DE RECAUDO ── */}
       <div className="px-4 pt-2">
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">

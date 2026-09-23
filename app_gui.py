@@ -99,6 +99,14 @@ class AppCC358(ctk.CTk):
             command=self._abrir_modo_tabla)
         self.btn_modo_tabla.pack(side="left", padx=4, pady=10)
 
+        # Selector de Hoja: Pruebas vs Principal
+        ctk.CTkLabel(top, text="Destino:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(10, 2), pady=10)
+        self.combo_hoja = ctk.CTkComboBox(
+            top, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=130,
+            command=self._on_cambio_hoja)
+        self.combo_hoja.set("📁 Pruebas")
+        self.combo_hoja.pack(side="left", padx=4, pady=10)
+
         # Botón MODO CÁMARA OCR
         self.btn_modo_camara = ctk.CTkButton(
             top, text="📷 Modo Cámara", width=120,
@@ -492,27 +500,38 @@ class AppCC358(ctk.CTk):
         m = re.search(r'\d+', txt)
         return int(m.group(0)) if m else None
 
+    def _obtener_hoja_tipo(self):
+        return "principal" if "PRINCIPAL" in self.combo_hoja.get().upper() else "pruebas"
+
+    def _on_cambio_hoja(self, valor):
+        hoja = self._obtener_hoja_tipo()
+        if hoja == "principal":
+            self._log("⚠️ ATENCIÓN: Modo Hoja PRINCIPAL (Producción) activado.")
+        else:
+            self._log("📁 Modo Hoja de Pruebas activado.")
+
     def _guardar_en_sheets(self):
         trabajador  = self.combo_trabajador.get()
         parqueadero = self.combo_parqueadero.get()
         dia_sel     = self._obtener_dia_seleccionado()
         fecha       = obtener_fecha_hoy(dia_sel)
+        hoja_tipo   = self._obtener_hoja_tipo()
         monedas     = self._leer_monedas()
         billetes    = self._leer_billetes()
 
         self.btn_guardar_top.configure(state="disabled", text="⏳ Guardando...")
-        self.lbl_resultado.configure(text="Conectando con Google Sheets...", text_color="#9CA3AF")
+        self.lbl_resultado.configure(text=f"Guardando en {hoja_tipo.upper()}...", text_color="#9CA3AF")
 
         threading.Thread(
             target=self._tarea_guardar,
-            args=(trabajador, parqueadero, fecha, monedas, billetes),
+            args=(trabajador, parqueadero, fecha, monedas, billetes, hoja_tipo),
             daemon=True
         ).start()
 
-    def _tarea_guardar(self, trabajador, parqueadero, fecha, monedas, billetes):
+    def _tarea_guardar(self, trabajador, parqueadero, fecha, monedas, billetes, hoja_tipo="pruebas"):
         try:
-            self._log(f"Buscando fila: {fecha} | {parqueadero} | {trabajador}...")
-            ws = conectar_sheet()
+            self._log(f"Buscando fila en {hoja_tipo.upper()}: {fecha} | {parqueadero} | {trabajador}...")
+            ws = conectar_sheet(hoja_tipo)
             fila = buscar_fila_trabajador(ws, fecha, parqueadero, trabajador)
 
             if fila is None:

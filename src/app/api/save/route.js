@@ -4,11 +4,11 @@ import { guardarFilaSheet, obtenerEstructuraDia, normalizar } from "@/lib/google
 export async function POST(req) {
   try {
     const body = await req.json();
-    let { fila, trabajador, parqueadero, dia, monedas = {}, billetes = {} } = body;
+    let { fila, trabajador, parqueadero, dia, hoja = "pruebas", monedas = {}, billetes = {} } = body;
 
     // Si no se proporcionó el número de fila exacto, buscarlo en la estructura del día seleccionado
     if (!fila) {
-      const resEstructura = await obtenerEstructuraDia(dia);
+      const resEstructura = await obtenerEstructuraDia(dia, hoja);
       const estructura = resEstructura.datos || [];
       const pNorm = normalizar(parqueadero);
       const tNorm = normalizar(trabajador);
@@ -35,18 +35,19 @@ export async function POST(req) {
 
       if (!fila) {
         return NextResponse.json(
-          { error: `No se encontró espacio disponible para ${trabajador} en ${parqueadero} (${resEstructura.fecha || "Día " + dia}).` },
+          { error: `No se encontró espacio disponible para ${trabajador} en ${parqueadero} (${resEstructura.fecha || "Día " + dia}) en la hoja ${resEstructura.nombreHoja}.` },
           { status: 400 }
         );
       }
     }
 
-    await guardarFilaSheet({ fila, trabajador, monedas, billetes });
+    await guardarFilaSheet({ fila, trabajador, monedas, billetes, hojaTipo: hoja });
 
     return NextResponse.json({
       success: true,
       fila,
-      mensaje: `Guardado exitosamente en fila ${fila}`
+      hoja,
+      mensaje: `Guardado exitosamente en fila ${fila} (${hoja === "principal" ? "HOJA PRINCIPAL" : "Pruebas"})`
     });
   } catch (error) {
     console.error("Error en /api/save:", error);

@@ -173,12 +173,19 @@ class VentanaConteo(ctk.CTkToplevel):
         self.combo_parqueadero.set(PARQUEADEROS[0])
         self.combo_parqueadero.grid(row=0, column=3, padx=(6, 12), pady=8, sticky="ew")
 
-        # Fecha del Recaudo
-        ctk.CTkLabel(frame_datos, text="Fecha Recaudo:").grid(
+        # Hoja Destino y Fecha del Recaudo
+        ctk.CTkLabel(frame_datos, text="Destino Hoja:").grid(
             row=1, column=0, padx=(12, 6), pady=(0, 8), sticky="w")
+        self.combo_hoja = ctk.CTkComboBox(
+            frame_datos, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=140)
+        self.combo_hoja.set("📁 Pruebas")
+        self.combo_hoja.grid(row=1, column=1, padx=6, pady=(0, 8), sticky="w")
+
+        ctk.CTkLabel(frame_datos, text="Fecha:").grid(
+            row=1, column=2, padx=(12, 6), pady=(0, 8), sticky="w")
 
         f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
-        f_dia.grid(row=1, column=1, columnspan=3, padx=6, pady=(0, 8), sticky="w")
+        f_dia.grid(row=1, column=3, padx=(6, 12), pady=(0, 8), sticky="ew")
 
         from datetime import datetime, timedelta
         ayer_dia = (datetime.now() - timedelta(days=1)).day
@@ -259,20 +266,21 @@ class VentanaConteo(ctk.CTkToplevel):
         trabajador  = self.combo_trabajador.get()
         parqueadero = self.combo_parqueadero.get()
         fecha       = self._obtener_fecha_final()
+        hoja_tipo   = "principal" if "PRINCIPAL" in self.combo_hoja.get().upper() else "pruebas"
         billetes    = self._leer_billetes()
 
         self.btn_guardar.configure(state="disabled", text="Guardando...")
-        self.lbl_estado.configure(text="Conectando...", text_color="#9CA3AF")
+        self.lbl_estado.configure(text=f"Guardando en {hoja_tipo.upper()}...", text_color="#9CA3AF")
 
         threading.Thread(
             target=self._tarea_guardar,
-            args=(trabajador, parqueadero, fecha, billetes),
+            args=(trabajador, parqueadero, fecha, billetes, hoja_tipo),
             daemon=True
         ).start()
 
-    def _tarea_guardar(self, trabajador, parqueadero, fecha, billetes):
+    def _tarea_guardar(self, trabajador, parqueadero, fecha, billetes, hoja_tipo="pruebas"):
         try:
-            ws = conectar_sheet()
+            ws = conectar_sheet(hoja_tipo)
             fila = buscar_fila_trabajador(ws, fecha, parqueadero, trabajador)
 
             if fila is None:

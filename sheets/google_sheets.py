@@ -26,17 +26,23 @@ SCOPES = [
 CREDS_FILE = "config/credentials.json"
 
 
-def conectar_sheet():
-    """Conecta con Google Sheets usando cuenta de servicio."""
-    from config.datos import GID_SHEET
+def conectar_sheet(tipo_hoja="pruebas"):
+    """Conecta con Google Sheets usando cuenta de servicio (pruebas o principal)."""
+    from config.datos import SHEETS_CONFIG
+    clave = "principal" if tipo_hoja.lower() == "principal" else "pruebas"
+    cfg = SHEETS_CONFIG[clave]
+
     creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
     client = gspread.authorize(creds)
-    sheet = client.open_by_key(ID_SHEET)
+    sheet = client.open_by_key(cfg["id"])
     # Abrir la pestaña específica por GID
     try:
-        worksheet = sheet.get_worksheet_by_id(int(GID_SHEET))
+        worksheet = sheet.get_worksheet_by_id(int(cfg["gid"]))
     except Exception:
-        worksheet = sheet.sheet1
+        try:
+            worksheet = sheet.worksheet(cfg["sheet_name"])
+        except Exception:
+            worksheet = sheet.sheet1
     return worksheet
 
 

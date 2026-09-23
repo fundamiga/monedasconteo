@@ -7,12 +7,15 @@ export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
     const diaParam = searchParams.get("dia");
+    const hojaParam = searchParams.get("hoja") || "pruebas";
 
-    const resultado = await obtenerEstructuraDia(diaParam);
+    const resultado = await obtenerEstructuraDia(diaParam, hojaParam);
     return NextResponse.json({
       success: true,
       dia: resultado.dia,
       fecha: resultado.fecha,
+      hoja: resultado.hoja,
+      nombreHoja: resultado.nombreHoja,
       datos: resultado.datos
     });
   } catch (error) {
