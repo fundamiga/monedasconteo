@@ -426,49 +426,58 @@ export default function Home() {
 
             {/* 1. MODO CÁMARA EN VIVO */}
             {modoCamara === "live" && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
-                <div className="relative rounded-xl overflow-hidden bg-black border border-slate-700" style={{ aspectRatio: "16/7" }}>
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
+                {/* Visor horizontal - proporción parecida a pantalla LCD CC358 */}
+                <div className="relative w-full bg-black" style={{ aspectRatio: "21/8" }}>
                   <video
                     ref={videoRef}
                     playsInline
                     muted
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-3">
-                    <div className="w-full h-full border-2 border-blue-400 rounded-lg flex items-start justify-between p-1.5" style={{ boxShadow: "0 0 0 9999px rgba(0,0,0,0.5)" }}>
-                      <span className="text-[9px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded">CC358</span>
-                      <span className="text-[9px] text-blue-300">8 filas</span>
+                  {/* Viñeta lateral y vertical para enfocar el centro */}
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 15%, transparent 85%, rgba(0,0,0,0.5) 100%)" }} />
+                  <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 20%, transparent 80%, rgba(0,0,0,0.5) 100%)" }} />
+                  {/* Marco guía con esquinas */}
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center" style={{ padding: "12% 8%" }}>
+                    <div className="relative w-full h-full">
+                      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-blue-400" />
+                      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-blue-400" />
+                      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-blue-400" />
+                      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-blue-400" />
+                      <div className="absolute inset-x-0 bottom-1 flex justify-center">
+                        <span className="text-[10px] text-blue-300/70 font-medium">Pantalla CC358</span>
+                      </div>
                     </div>
                   </div>
-
                   {scanning && (
-                    <div className="absolute inset-0 bg-black/75 flex items-center justify-center gap-2 z-10">
-                      <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
+                    <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center gap-2 z-10">
+                      <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
                       <p className="text-xs font-bold text-blue-200">{scanStatus}</p>
                     </div>
                   )}
                 </div>
-
                 <canvas ref={canvasRef} className="hidden" />
-
-                {streamError ? (
-                  <p className="text-xs text-rose-400">{streamError}</p>
-                ) : (
-                  <button
-                    onClick={capturarFrameEnVivo}
-                    disabled={scanning || !streamActive}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition disabled:opacity-50 text-sm"
-                  >
-                    <Camera className="w-4 h-4" />
-                    ESCANEAR PANTALLA
-                  </button>
-                )}
+                <div className="p-3">
+                  {streamError ? (
+                    <p className="text-xs text-rose-400 text-center">{streamError}</p>
+                  ) : (
+                    <button
+                      onClick={capturarFrameEnVivo}
+                      disabled={scanning || !streamActive}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2 transition disabled:opacity-50 text-sm"
+                    >
+                      <Camera className="w-4 h-4" />
+                      ESCANEAR PANTALLA CC358
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
             {/* 2. MODO SUBIR O TOMAR FOTO NATIVA */}
             {modoCamara === "photo" && (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -478,40 +487,42 @@ export default function Home() {
                 />
 
                 {imagePreview ? (
-                  <div className="relative rounded-xl overflow-hidden border border-slate-700 mb-2 bg-black" style={{ aspectRatio: "16/7" }}>
-                    <img
-                      src={imagePreview}
-                      alt="Pantalla CC358"
-                      className="w-full h-full object-contain"
-                    />
-                    {scanning && (
-                      <div className="absolute inset-0 bg-black/70 flex items-center justify-center gap-2">
-                        <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
-                        <p className="text-xs font-semibold text-blue-200">{scanStatus}</p>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute bottom-2 right-2 bg-slate-900/90 text-slate-200 text-xs px-2.5 py-1 rounded-lg border border-slate-700 flex items-center gap-1 font-medium"
-                    >
-                      <Camera className="w-3.5 h-3.5" />
-                      Tomar otra foto
-                    </button>
-                  </div>
+                  <>
+                    <div className="relative w-full bg-black" style={{ aspectRatio: "16/6" }}>
+                      <img
+                        src={imagePreview}
+                        alt="Pantalla CC358"
+                        className="absolute inset-0 w-full h-full object-contain"
+                      />
+                      {scanning && (
+                        <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center gap-2 z-10">
+                          <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
+                          <p className="text-xs font-bold text-blue-200">{scanStatus}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-semibold rounded-xl flex items-center justify-center gap-2 transition"
+                      >
+                        <Camera className="w-4 h-4" />
+                        Tomar otra foto
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full py-5 border-2 border-dashed border-blue-500/50 hover:border-blue-400 bg-blue-500/10 hover:bg-blue-500/15 rounded-xl flex items-center justify-center gap-3 transition group"
+                    className="w-full py-8 flex flex-col items-center justify-center gap-3 transition group hover:bg-slate-900"
                   >
-                    <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
-                      <Camera className="w-6 h-6" />
+                    <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 group-hover:scale-105 transition">
+                      <Camera className="w-7 h-7" />
                     </div>
-                    <span className="text-sm font-semibold text-blue-200">
-                      Tomar o Subir Foto de la Pantalla
-                    </span>
-                    <span className="text-[11px] text-slate-400">
-                      Usa la cámara de tu celular o selecciona una foto
-                    </span>
+                    <div className="text-center">
+                      <span className="text-sm font-bold text-blue-200 block">Tomar o subir foto</span>
+                      <span className="text-[11px] text-slate-400">Apunta a la pantalla azul CC358</span>
+                    </div>
                   </button>
                 )}
               </div>
