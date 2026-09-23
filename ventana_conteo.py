@@ -32,15 +32,17 @@ class VentanaConteo(ctk.CTkToplevel):
         self.callback_cerrar = callback_cerrar
 
         self.title("Nuevo Conteo CC358")
-        self.geometry("650x575")
+        ancho = 670
+        alto = 645
+        self.geometry(f"{ancho}x{alto}")
         self.resizable(False, False)
         self.attributes("-topmost", True)  # Siempre encima
 
-        # Centrar en pantalla
+        # Centrar en pantalla con holgura vertical
         self.update_idletasks()
-        x = (self.winfo_screenwidth() // 2) - 320
-        y = (self.winfo_screenheight() // 2) - 280
-        self.geometry(f"640x560+{x}+{y}")
+        x = max(0, (self.winfo_screenwidth() // 2) - (ancho // 2))
+        y = max(15, (self.winfo_screenheight() // 2) - (alto // 2) - 20)
+        self.geometry(f"{ancho}x{alto}+{x}+{y}")
 
         self._crear_ui()
 
