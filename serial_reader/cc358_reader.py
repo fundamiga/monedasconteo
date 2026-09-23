@@ -1,11 +1,12 @@
 """
 Lector serial para SAT CC358
-Incluye modo SIMULACIÓN para pruebas sin cable físico
+Formato oficial descubierto con cable FTDI USB-RS232
 """
 
 import threading
 import time
 import random
+import re
 from datetime import datetime
 
 
@@ -46,10 +47,14 @@ class CC358Reader:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=0.5
+                timeout=0.2
             )
+            # Señales DTR/RTS requeridas para comunicación fluida
+            self.ser.dtr = True
+            self.ser.rts = True
+
             self.activo = True
-            self.callback_log(f"🟢 Conectado a {puerto} @ {baudrate} baudios.")
+            self.callback_log(f"🟢 Conectado a {puerto} @ {baudrate} baudios (SAT CC358 lista).")
             self.hilo = threading.Thread(target=self._loop_serial, daemon=True)
             self.hilo.start()
             return True
@@ -61,7 +66,10 @@ class CC358Reader:
         """Desconecta el puerto serial."""
         self.activo = False
         if self.ser and self.ser.is_open:
-            self.ser.close()
+            try:
+                self.ser.close()
+            except Exception:
+                pass
         self.callback_log("🔒 Desconectado.")
 
     def _loop_serial(self):
@@ -77,38 +85,33 @@ class CC358Reader:
                     buffer.extend(datos)
                     ultimo = time.time()
                 else:
+                    # Si pasaron más de 300ms sin nuevos bytes y hay datos acumulados
                     if len(buffer) > 0 and (time.time() - ultimo > 0.3):
-                        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
-                        hex_str = " ".join(f"{b:02X}" for b in buffer)
+                        timestamp = datetime.now().strftime("%H:%M:%S")
                         texto = buffer.decode("latin1", errors="replace")
 
                         self.callback_log(
-                            f"\n📥 [{timestamp}] {len(buffer)} bytes:\n"
-                            f"   HEX  : {hex_str}\n"
-                            f"   TEXTO: {texto}\n"
+                            f"\n📥 [{timestamp}] Trama recibida de SAT CC358 ({len(buffer)} bytes):\n"
+                            + texto.strip()
                         )
 
-                        # Intentar parsear los datos
+                        # Parsear los datos de la CC358
                         monedas = self._parsear(buffer)
                         if monedas:
                             self.callback_datos(monedas)
 
                         buffer.clear()
-                    time.sleep(0.05)
+                    time.sleep(0.03)
             except Exception as e:
                 self.callback_log(f"⚠️ Error en lectura: {e}")
                 break
 
     def _loop_simulacion(self):
-        """
-        Modo simulación: espera 5 segundos y genera datos de prueba.
-        Simula lo que haría la CC358 al terminar un conteo.
-        """
-        self.callback_log("⏳ Simulación: esperando 5 segundos para generar un conteo...")
+        """Modo simulación: genera datos de prueba."""
+        self.callback_log("⏳ Simulación: esperando 5 segundos...")
         time.sleep(5)
 
         while self.activo:
-            # Genera cantidades aleatorias de monedas (simulando un conteo real)
             monedas_sim = {
                 '1000': random.randint(0, 10),
                 '500':  random.randint(0, 20),
@@ -119,54 +122,75 @@ class CC358Reader:
                 '50a':  random.randint(0, 50),
                 '50b':  random.randint(0, 40),
             }
-
-            self.callback_log(
-                f"\n🟡 [SIMULACIÓN] Conteo generado:\n"
-                f"   $1.000  → {monedas_sim['1000']}\n"
-                f"   $500    → {monedas_sim['500']}\n"
-                f"   $200(A) → {monedas_sim['200a']}\n"
-                f"   $200(B) → {monedas_sim['200b']}\n"
-                f"   $100(A) → {monedas_sim['100a']}\n"
-                f"   $100(B) → {monedas_sim['100b']}\n"
-                f"   $50(A)  → {monedas_sim['50a']}\n"
-                f"   $50(B)  → {monedas_sim['50b']}\n"
-            )
+            self.callback_log(f"\n🟡 [SIMULACIÓN] Conteo generado.")
             self.callback_datos(monedas_sim)
-
-            # Esperar 30 segundos antes del próximo conteo simulado
             time.sleep(30)
 
     def _parsear(self, buffer):
         """
-        Parser de datos de la CC358.
-        ⚠️ Este parser es provisional - se completará cuando tengamos
-           la primera trama real de la máquina con el cable FTDI.
-
-        Por ahora intenta leer un formato simple de texto CSV:
-        Ej: "1000:5,500:10,200:20,100:15,50:8"
+        Parser exacto para la trama de la SAT CC358.
+        Estructura de la trama recibida:
+          Item:     Quantity     Amount
+          1000:     2         2000
+           200:     4          800
+           500:    13         6500
+           100:     7          700
+           200:    28         5600
+            50:     2          100
+           100:    25         2500
+            50:     3          150
+        Total: 18350
         """
         try:
-            texto = buffer.decode("latin1", errors="replace").strip()
-            monedas = {}
+            texto = buffer.decode("latin1", errors="replace")
+            lineas = texto.splitlines()
 
-            # Intentar formato CSV simple
-            if ':' in texto:
-                partes = texto.split(',')
-                for parte in partes:
-                    if ':' in parte:
-                        denom, cantidad = parte.split(':')
-                        monedas[denom.strip()] = int(cantidad.strip())
-                if monedas:
-                    return monedas
+            monedas = {
+                '1000': 0, '200a': 0, '500': 0, '100a': 0,
+                '200b': 0, '50a': 0, '100b': 0, '50b': 0
+            }
 
-            # Si no reconocemos el formato, logueamos para analizarlo
-            self.callback_log(
-                f"⚠️ Formato desconocido de CC358. "
-                f"Captura guardada en 'captura_cc358.log' para análisis."
-            )
-            with open("captura_cc358.log", "a") as f:
-                f.write(f"\n{datetime.now()}: {buffer.hex()}\n")
+            # El orden fijo de las 8 líneas que envía la CC358:
+            # 1. 1000
+            # 2. 200 (primera = tipo A)
+            # 3. 500
+            # 4. 100 (primera = tipo A)
+            # 5. 200 (segunda = tipo B)
+            # 6. 50  (primera = tipo A)
+            # 7. 100 (segunda = tipo B)
+            # 8. 50  (segunda = tipo B)
+            orden_keys = ['1000', '200a', '500', '100a', '200b', '50a', '100b', '50b']
+            idx = 0
+
+            for linea in lineas:
+                linea_limpia = linea.strip()
+                if not linea_limpia or ':' not in linea_limpia:
+                    continue
+
+                if "TOTAL" in linea_limpia.upper() or "ITEM" in linea_limpia.upper():
+                    continue
+
+                # Extraer números de la línea: [denominacion, cantidad, subtotal]
+                nums = re.findall(r'\d+', linea_limpia)
+                if len(nums) >= 2 and idx < len(orden_keys):
+                    # nums[0] es la denominación, nums[1] es la CANTIDAD
+                    cantidad = int(nums[1])
+                    monedas[orden_keys[idx]] = cantidad
+                    idx += 1
+
+            if idx >= 8:
+                self.callback_log(
+                    f"✅ ¡Conteo procesado con éxito por cable!\n"
+                    f"   $1.000: {monedas['1000']} | $500: {monedas['500']} | $200(A): {monedas['200a']} | $200(B): {monedas['200b']}\n"
+                    f"   $100(A): {monedas['100a']} | $100(B): {monedas['100b']} | $50(A): {monedas['50a']} | $50(B): {monedas['50b']}"
+                )
+                return monedas
+
+            # Si se leyeron líneas pero menos de 8
+            if any(monedas.values()):
+                return monedas
 
             return None
-        except Exception:
+        except Exception as e:
+            self.callback_log(f"⚠️ Error al parsear trama: {e}")
             return None

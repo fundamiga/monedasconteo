@@ -40,14 +40,20 @@ def conectar_sheet():
     return worksheet
 
 
-def obtener_fecha_hoy():
+def obtener_fecha_hoy(dia=None):
     """
-    Retorna la fecha de hoy en el formato que usa el Sheet.
-    El Sheet usa DD/2/YYYY (el mes siempre aparece como '2' en este template).
-    Ejemplo: hoy 18 de septiembre → '18/2/2026'
+    Retorna la fecha en el formato que usa el Sheet (DD/2/YYYY).
+    Por defecto retorna el DÍA ANTERIOR (ayer), ya que el recaudo siempre
+    corresponde al turno recogido el día anterior.
     """
     hoy = datetime.now()
-    return f"{hoy.day}/2/{hoy.year}"
+    if dia is None:
+        from datetime import timedelta
+        ayer = hoy - timedelta(days=1)
+        dia_num = ayer.day
+    else:
+        dia_num = int(dia)
+    return f"{dia_num}/2/{hoy.year}"
 
 
 def normalizar(texto):

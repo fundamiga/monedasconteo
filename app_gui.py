@@ -180,11 +180,24 @@ class AppCC358(ctk.CTk):
         self.combo_parqueadero.set(PARQUEADEROS[0])
         self.combo_parqueadero.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=3)
 
-        ctk.CTkLabel(seleccion, text="Fecha:").grid(row=2, column=0, sticky="w", pady=3)
+        ctk.CTkLabel(seleccion, text="Fecha Recaudo:").grid(row=2, column=0, sticky="w", pady=3)
+        fecha_frame = ctk.CTkFrame(seleccion, fg_color="transparent")
+        fecha_frame.grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=3)
+
+        from datetime import datetime, timedelta
+        ayer_dia = (datetime.now() - timedelta(days=1)).day
+        dias_opciones = [f"Dia {d} (Ayer)" if d == ayer_dia else f"Dia {d} (Hoy)" if d == datetime.now().day else f"Dia {d}" for d in range(1, 32)]
+        
+        self.combo_dia = ctk.CTkComboBox(
+            fecha_frame, values=dias_opciones, width=160,
+            command=self._on_cambio_dia)
+        self.combo_dia.set(f"Dia {ayer_dia} (Ayer)")
+        self.combo_dia.pack(side="left")
+
         self.lbl_fecha = ctk.CTkLabel(
-            seleccion, text=obtener_fecha_hoy(),
+            fecha_frame, text=obtener_fecha_hoy(ayer_dia),
             text_color="#10B981", font=ctk.CTkFont(weight="bold"))
-        self.lbl_fecha.grid(row=2, column=1, sticky="w", padx=(8, 0), pady=3)
+        self.lbl_fecha.pack(side="left", padx=10)
 
         # ── MONEDAS (automáticas desde CC358) ──
         ctk.CTkLabel(left, text="🪙 MONEDAS  (desde CC358 — automático)",
@@ -466,10 +479,24 @@ class AppCC358(ctk.CTk):
     # GUARDAR EN GOOGLE SHEETS
     # ─────────────────────────────────────────
 
+    def _on_cambio_dia(self, valor):
+        import re
+        m = re.search(r'\d+', valor)
+        if m:
+            dia_num = int(m.group(0))
+            self.lbl_fecha.configure(text=obtener_fecha_hoy(dia_num))
+
+    def _obtener_dia_seleccionado(self):
+        import re
+        txt = self.combo_dia.get()
+        m = re.search(r'\d+', txt)
+        return int(m.group(0)) if m else None
+
     def _guardar_en_sheets(self):
         trabajador  = self.combo_trabajador.get()
         parqueadero = self.combo_parqueadero.get()
-        fecha       = obtener_fecha_hoy()
+        dia_sel     = self._obtener_dia_seleccionado()
+        fecha       = obtener_fecha_hoy(dia_sel)
         monedas     = self._leer_monedas()
         billetes    = self._leer_billetes()
 
