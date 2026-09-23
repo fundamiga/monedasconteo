@@ -13,7 +13,7 @@ export async function POST(req) {
 
     if (!geminiKey) {
       return NextResponse.json(
-        { error: "Falta la variable de entorno GEMINI_API_KEY en Vercel." },
+        { error: "Falta configurar la variable GEMINI_API_KEY en Vercel." },
         { status: 500 }
       );
     }
@@ -28,46 +28,44 @@ export async function POST(req) {
       if (match) mimeType = match[1];
     }
 
-    const prompt = `Eres un lector especializado de pantallas LCD azules de máquinas contadoras de monedas SAT CC358.
+    const prompt = `Observa detalladamente la pantalla LCD azul de esta contadora de monedas SAT CC358.
+Muestra una tabla con 8 renglones fijos y 3 columnas:
+- Columna 1: denominación de la moneda
+- Columna 2 (CENTRAL): CANTIDAD de monedas contadas (este es el dato exacto que necesito)
+- Columna 3: subtotal en pesos
 
-La pantalla tiene EXACTAMENTE 3 COLUMNAS y 8 FILAS fijas:
-- COLUMNA IZQUIERDA: tipo de denominación
-- COLUMNA DEL MEDIO (CENTRO): CANTIDAD de monedas contadas  ← EL NÚMERO QUE DEBES LEER
-- COLUMNA DERECHA: subtotal en pesos (el número más grande, que NO debes usar)
+Los 8 renglones en orden de arriba hacia abajo corresponden a:
+1. 1K ($1000)
+2. 200 (primera fila de $200) -> 200a
+3. 500 ($500)
+4. 100 (primera fila de $100) -> 100a
+5. 200 (segunda fila de $200) -> 200b
+6. 50 (primera fila de $50) -> 50a
+7. 100 (segunda fila de $100) -> 100b
+8. 50 (segunda fila de $50) -> 50b
 
-IMPORTANTE: Tú debes leer SOLO la columna del MEDIO (la cantidad de monedas), NUNCA la columna derecha (el subtotal).
+Ejemplo de cómo leer la pantalla:
+1 K:      1      1000   -> cantidad = 1
+200:      0         0   -> cantidad = 0
+500:      2      1000   -> cantidad = 2
+100:     11      1100   -> cantidad = 11
+200:      7      1400   -> cantidad = 7
+50:      69      3450   -> cantidad = 69
+100:     25      2500   -> cantidad = 25
+50:       1        50   -> cantidad = 1
 
-Las 8 filas en orden exacto de arriba hacia abajo son:
-Fila 1: "1 K"  → moneda $1.000  → lee la CANTIDAD del centro
-Fila 2: "200"  → moneda $200 vieja (tipo A) → lee la CANTIDAD del centro
-Fila 3: "500"  → moneda $500    → lee la CANTIDAD del centro
-Fila 4: "100"  → moneda $100 vieja (tipo A) → lee la CANTIDAD del centro
-Fila 5: "200"  → moneda $200 nueva (tipo B) → lee la CANTIDAD del centro
-Fila 6: " 50"  → moneda $50 vieja (tipo A)  → lee la CANTIDAD del centro
-Fila 7: "100"  → moneda $100 nueva (tipo B) → lee la CANTIDAD del centro
-Fila 8: " 50"  → moneda $50 nueva (tipo B)  → lee la CANTIDAD del centro
-
-EJEMPLOS de cómo leer cada fila:
-- Fila que dice: "1 K    1    1000"  → la CANTIDAD es 1   (NO 1000)
-- Fila que dice: "200    7    1400"  → la CANTIDAD es 7   (NO 1400)
-- Fila que dice: " 50   69   3450"  → la CANTIDAD es 69  (NO 3450)
-- Fila que dice: "100   11   1100"  → la CANTIDAD es 11  (NO 1100)
-- Fila que dice: "500    0       0"  → la CANTIDAD es 0
-
-Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de código markdown:
+Extrae con precisión milimétrica las 8 cantidades (columna central). Si una fila tiene 0 o está vacía pon 0.
+Responde ÚNICAMENTE un JSON válido con este formato:
 {
-  "1000": <cantidad fila 1>,
-  "200a": <cantidad fila 2>,
-  "500": <cantidad fila 3>,
-  "100a": <cantidad fila 4>,
-  "200b": <cantidad fila 5>,
-  "50a": <cantidad fila 6>,
-  "100b": <cantidad fila 7>,
-  "50b": <cantidad fila 8>
+  "1000": 0,
+  "200a": 0,
+  "500": 0,
+  "100a": 0,
+  "200b": 0,
+  "50a": 0,
+  "100b": 0,
+  "50b": 0
 }`;
-
-    // gemini-2.5-pro: el modelo más potente y preciso de Google para visión
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiKey}`;
 
     const payload = {
       contents: [
@@ -88,45 +86,86 @@ Responde ÚNICAMENTE con un JSON válido, sin texto adicional, sin bloques de c�
       }
     };
 
-    const geminiRes = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
+    // Lista de modelos disponibles en orden de prioridad
+    const modelos = [
+      "gemini-3.5-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3-flash-preview"
+    ];
 
-    if (!geminiRes.ok) {
-      const errData = await geminiRes.text();
-      console.error("Error Gemini API:", errData);
+    let geminiRes = null;
+    let ultimoError = null;
+    let modeloExitoso = null;
+
+    for (const model of modelos) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          geminiRes = await res.json();
+          modeloExitoso = model;
+          break;
+        } else {
+          const errText = await res.text();
+          ultimoError = `[${model}] Error ${res.status}: ${errText}`;
+          console.warn(ultimoError);
+        }
+      } catch (callErr) {
+        ultimoError = `[${model}] Exception: ${callErr.message}`;
+        console.warn(ultimoError);
+      }
+    }
+
+    if (!geminiRes) {
+      console.error("Ningún modelo de Gemini respondió con éxito:", ultimoError);
       return NextResponse.json(
-        { error: `Error Gemini (${geminiRes.status}): ${errData}` },
-        { status: 500 }
+        { error: `Fallo al procesar con IA: ${ultimoError}` },
+        { status: 502 }
       );
     }
 
-    const data = await geminiRes.json();
-    const candidateText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const candidateText = geminiRes?.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    console.log(`Respuesta exitosa de ${modeloExitoso}:`, candidateText);
 
-    console.log("Gemini 2.5 Pro response:", candidateText);
-
+    // Limpiar markdown tipo ```json ... ```
     const cleanedText = candidateText
       .replace(/```json/gi, "")
       .replace(/```/g, "")
       .trim();
 
-    let resultado;
-    try {
-      resultado = JSON.parse(cleanedText);
-    } catch (parseErr) {
-      console.error("Error parseando respuesta:", cleanedText);
+    // Extraer solo el bloque { ... }
+    const matchJson = cleanedText.match(/\{[\s\S]*\}/);
+    if (!matchJson) {
       return NextResponse.json(
-        { error: `Gemini respondió algo inesperado: ${cleanedText}` },
+        { error: `Respuesta de IA no contiene JSON válido: ${candidateText}` },
         { status: 500 }
       );
     }
 
+    const resultado = JSON.parse(matchJson[0]);
+
+    // Asegurar que todos los valores sean numéricos
+    const monedasLimpias = {
+      "1000": parseInt(resultado["1000"], 10) || 0,
+      "200a": parseInt(resultado["200a"], 10) || 0,
+      "500": parseInt(resultado["500"], 10) || 0,
+      "100a": parseInt(resultado["100a"], 10) || 0,
+      "200b": parseInt(resultado["200b"], 10) || 0,
+      "50a": parseInt(resultado["50a"], 10) || 0,
+      "100b": parseInt(resultado["100b"], 10) || 0,
+      "50b": parseInt(resultado["50b"], 10) || 0
+    };
+
     return NextResponse.json({
       success: true,
-      monedas: resultado,
+      monedas: monedasLimpias,
+      model: modeloExitoso,
       raw: candidateText
     });
   } catch (error) {

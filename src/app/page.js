@@ -201,14 +201,16 @@ export default function Home() {
         setMonedas((prev) => ({ ...prev, ...data.monedas }));
         setMensaje({
           tipo: "success",
-          texto: "🎯 ¡Pantalla leída por Gemini AI! Revisa los valores abajo."
+          texto: `🎯 ¡Pantalla leída con IA (${data.model || "Gemini"})! Revisa los valores.`
         });
         setScanning(false);
         setScanStatus("");
         return;
+      } else if (data.error) {
+        console.warn("Error devuelto por Gemini:", data.error);
       }
     } catch (apiErr) {
-      console.warn("Fallo API Gemini Vision, intentando fallback:", apiErr);
+      console.warn("Fallo API Gemini Vision:", apiErr);
     }
 
     // 2. Fallback con Tesseract.js en el navegador si no hay clave de Gemini
