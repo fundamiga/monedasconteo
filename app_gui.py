@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 
 # En aplicaciones empaquetadas con console=False (noconsole), sys.stdout y sys.stderr son None
 # y cualquier biblioteca (como pyserial o logging) que intente escribir falla en silencio.
@@ -32,6 +33,33 @@ def fmt_cop(valor):
     return f"$ {valor:,.0f}".replace(",", ".")
 
 
+def cargar_ajustes():
+    config_file = os.path.join(os.path.expanduser("~"), ".conteo_cc358_config.json")
+    ajustes = {
+        "auto_conectar": True,
+        "modo_continuo": True,
+        "modo_rapido": True,
+        "baud": "9600"
+    }
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, "r", encoding="utf-8") as f:
+                guardados = json.load(f)
+                ajustes.update(guardados)
+        except Exception:
+            pass
+    return ajustes
+
+
+def guardar_ajustes(ajustes):
+    config_file = os.path.join(os.path.expanduser("~"), ".conteo_cc358_config.json")
+    try:
+        with open(config_file, "w", encoding="utf-8") as f:
+            json.dump(ajustes, f, indent=2)
+    except Exception:
+        pass
+
+
 class AppCC358(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -39,12 +67,16 @@ class AppCC358(ctk.CTk):
         self.geometry("1100x750")
         self.minsize(950, 650)
 
+        # Cargar preferencias guardadas del usuario
+        self.ajustes = cargar_ajustes()
+        self.auto_conectar = self.ajustes.get("auto_conectar", True)
+        self.modo_continuo = self.ajustes.get("modo_continuo", True)
+        self.modo_rapido = self.ajustes.get("modo_rapido", True)
+
         # Estado
         self.reader = None
         self.worksheet = None
         self.monedas_actuales = {}
-        self.modo_rapido = True          # Modo ventana emergente automática
-        self.modo_continuo = True        # Al guardar un turno, abre inmediatamente el siguiente en blanco
         self.ultimo_respaldo = None      # Memoria del último conteo guardado para recuperar si se necesita
         self._ventana_abierta = False     # Para no abrir dos ventanas a la vez
         self.ventana_rapida_instancia = None # Referencia a la ventana rápida activa
@@ -56,6 +88,10 @@ class AppCC358(ctk.CTk):
         # Atajo global en toda la aplicación: Barra espaciadora y tecla F1
         self.bind_all("<F1>", lambda e: self._adelantar_nuevo_turno())
         self.bind_all("<space>", self._on_space_pressed)
+
+        # Si auto-conectar está habilitado por defecto, intentar conexión en breve
+        if self.auto_conectar:
+            self.after(600, self._intentar_autoconexion)
 
     def _on_space_pressed(self, event):
         # Si ya hay una ventana rápida abierta, no hacer nada para permitir espacios en sus campos
@@ -122,6 +158,16 @@ class AppCC358(ctk.CTk):
             text_color="#FF6B6B",
             font=ctk.CTkFont(size=12, weight="bold"))
         self.lbl_status.pack(side="left", padx=6)
+
+        # Checkbox Auto-conectar COM al abrir (predeterminada activa)
+        self.chk_autoconectar = ctk.CTkCheckBox(
+            fila1, text="Auto-conectar COM", font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._toggle_autoconectar)
+        if self.auto_conectar:
+            self.chk_autoconectar.select()
+        else:
+            self.chk_autoconectar.deselect()
+        self.chk_autoconectar.pack(side="left", padx=(10, 4))
 
         # A la derecha de fila 1: GUARDAR y LIMPIAR
         ctk.CTkButton(
@@ -391,21 +437,75 @@ class AppCC358(ctk.CTk):
         if puertos:
             vals = [f"{p.device} ({p.description})" for p in puertos]
             self.combo_puertos.configure(values=vals)
-            self.combo_puertos.set(vals[0])
+            # Priorizar puerto serie USB si existe (CH340, USB Serial, etc.)
+            seleccion = vals[0]
+            for val in vals:
+                v_lower = val.lower()
+                if any(w in v_lower for w in ["ch340", "usb", "serial", "uart", "cp210"]):
+                    seleccion = val
+                    break
+            self.combo_puertos.set(seleccion)
         else:
             self.combo_puertos.configure(values=["Sin puertos COM"])
             self.combo_puertos.set("Sin puertos COM")
+
+    def _toggle_autoconectar(self):
+        self.auto_conectar = bool(self.chk_autoconectar.get())
+        self.ajustes["auto_conectar"] = self.auto_conectar
+        guardar_ajustes(self.ajustes)
+        if self.auto_conectar:
+            self._log("⚡ Auto-conectar COM activado: cada vez que abras el programa se conectará solo.")
+        else:
+            self._log("Auto-conectar COM desactivado: conexión manual requerida.")
+
+    def _intentar_autoconexion(self):
+        """Intenta conectarse automáticamente al puerto COM disponible al arrancar."""
+        if not self.auto_conectar:
+            return
+        if self.reader and self.reader.activo:
+            return
+
+        val = self.combo_puertos.get()
+        if not val or "Sin puertos COM" in val or "Buscando" in val:
+            self._log("ℹ️ Auto-conectar: No se detectó puerto COM activo. Conecta la máquina por USB.")
+            return
+
+        puerto = val.split()[0]
+        baud_str = self.combo_baud.get()
+        baud = int(baud_str) if baud_str.isdigit() else 9600
+
+        self._log(f"🔌 Auto-conectando al puerto {puerto} ({baud} baud)...")
+        self.reader = CC358Reader(self._on_datos_recibidos, self._log_thread)
+        ok = self.reader.conectar(puerto, baud, simulacion=False)
+        if ok:
+            self.btn_conectar.configure(
+                text="Desconectar", fg_color="#DC2626", hover_color="#991B1B")
+            self.lbl_status.configure(
+                text=f"🟢 {puerto}", text_color="#10B981")
+            self._log(f"✅ Conexión automática exitosa en {puerto}. Listo para recibir conteos con PRINT.")
+        else:
+            self.reader = None
+            self.btn_conectar.configure(
+                text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
+            self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+            self._log(f"⚠️ No se pudo auto-conectar en {puerto}. Puedes conectar manualmente.")
 
     def _toggle_conexion(self):
         if self.reader and self.reader.activo:
             self.reader.desconectar()
             self.reader = None
             self.btn_conectar.configure(
-                text="Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
+                text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
             self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+            self._log("Puerto COM desconectado.")
         else:
-            puerto = self.combo_puertos.get().split()[0]
-            baud = int(self.combo_baud.get())
+            val = self.combo_puertos.get()
+            if not val or "Sin puertos COM" in val or "Buscando" in val:
+                self._log("⚠️ No hay un puerto COM válido seleccionado.")
+                return
+            puerto = val.split()[0]
+            baud_str = self.combo_baud.get()
+            baud = int(baud_str) if baud_str.isdigit() else 9600
             self.reader = CC358Reader(self._on_datos_recibidos, self._log_thread)
             ok = self.reader.conectar(puerto, baud, simulacion=False)
             if ok:
@@ -413,6 +513,13 @@ class AppCC358(ctk.CTk):
                     text="Desconectar", fg_color="#DC2626", hover_color="#991B1B")
                 self.lbl_status.configure(
                     text=f"🟢 {puerto}", text_color="#10B981")
+                self._log(f"Conectado exitosamente a {puerto} a {baud} baudios.")
+            else:
+                self.reader = None
+                self.btn_conectar.configure(
+                    text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
+                self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+                self._log(f"❌ Error al conectar a {puerto}.")
 
     def _toggle_simulacion(self):
         if self.reader and self.reader.activo:
@@ -428,6 +535,8 @@ class AppCC358(ctk.CTk):
 
     def _toggle_modo_rapido(self):
         self.modo_rapido = not self.modo_rapido
+        self.ajustes["modo_rapido"] = self.modo_rapido
+        guardar_ajustes(self.ajustes)
         if self.modo_rapido:
             self.btn_modo_rapido.configure(
                 text="⚡ Modo Rapido ON", fg_color="#D97706", hover_color="#B45309")
@@ -439,6 +548,8 @@ class AppCC358(ctk.CTk):
 
     def _toggle_modo_continuo(self):
         self.modo_continuo = bool(self.chk_continuo.get())
+        self.ajustes["modo_continuo"] = self.modo_continuo
+        guardar_ajustes(self.ajustes)
         if self.modo_continuo:
             self._log("⚡ Modo Continuo ACTIVO: Al guardar se abrirá automáticamente el siguiente turno en 0.")
         else:
