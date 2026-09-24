@@ -258,23 +258,53 @@ class VentanaConteo(ctk.CTkToplevel):
 
         ctk.CTkButton(frame_btns, text="Cancelar",
                       fg_color="#374151", hover_color="#4B5563",
-                      width=100, height=36, command=self.destroy).pack(side="left", padx=6)
+                      width=90, height=36, command=self.destroy).pack(side="left", padx=4)
+
+        # Botón DISCRETO RECUPERAR ANTERIOR dentro de la ventana de conteo
+        self.btn_recuperar = ctk.CTkButton(
+            frame_btns, text="↩️ Recuperar Anterior",
+            fg_color="#78350F", hover_color="#92400E", text_color="#FDE68A",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            width=135, height=36,
+            command=self._recuperar_anterior)
+        self.btn_recuperar.pack(side="left", padx=4)
 
         self.lbl_estado = ctk.CTkLabel(frame_btns, text="",
                                         text_color="#9CA3AF")
-        self.lbl_estado.pack(side="left", padx=10)
+        self.lbl_estado.pack(side="left", padx=6)
 
         self.btn_guardar = ctk.CTkButton(
             frame_btns,
             text="💾 GUARDAR Y CERRAR",
             fg_color="#107C41", hover_color="#0B5C30",
             font=ctk.CTkFont(size=14, weight="bold"),
-            width=200, height=38,
+            width=190, height=38,
             command=self._guardar)
         self.btn_guardar.pack(side="right", padx=6)
 
         # Atajo Enter para guardar rápidamente
         self.bind("<Return>", lambda e: self._guardar())
+
+    def _recuperar_anterior(self):
+        """Restaura los datos del turno anterior guardados en la app principal."""
+        if hasattr(self.master, "ultimo_respaldo") and self.master.ultimo_respaldo:
+            resp = self.master.ultimo_respaldo
+            if resp.get("monedas"):
+                self.recibir_conteo(resp["monedas"])
+            if resp.get("billetes"):
+                for k, v in resp["billetes"].items():
+                    if k in self.campos_billetes:
+                        self.campos_billetes[k].delete(0, "end")
+                        if v > 0:
+                            self.campos_billetes[k].insert(0, str(v))
+            if resp.get("trabajador"):
+                self.combo_trabajador.set(resp["trabajador"])
+            if resp.get("parqueadero"):
+                self.combo_parqueadero.set(resp["parqueadero"])
+            self._actualizar_total()
+            self.lbl_estado.configure(text="↩️ Datos anteriores recuperados", text_color="#FBBF24")
+        else:
+            self.lbl_estado.configure(text="⚠️ No hay datos previos en memoria", text_color="#9CA3AF")
 
     def recibir_conteo(self, nuevas_monedas):
         """Inyecta el conteo de la CC358 en vivo cuando la máquina manda PRINT."""
@@ -359,17 +389,27 @@ class VentanaConteo(ctk.CTkToplevel):
                 escribir_nombre_trabajador(ws, fila, trabajador)
 
             guardar_conteo(ws, fila, self.monedas, billetes)
+            datos_guardados = {
+                "monedas": {**self.monedas},
+                "billetes": {**billetes},
+                "trabajador": trabajador,
+                "parqueadero": parqueadero
+            }
+            if hasattr(self.master, "ultimo_respaldo"):
+                self.master.ultimo_respaldo = datos_guardados
             self.after(0, self._exito)
 
         except Exception as e:
             self.after(0, self._error, str(e))
 
     def _exito(self):
-        self.lbl_estado.configure(text="Guardado correctamente", text_color="#10B981")
-        if self.callback_cerrar:
-            self.callback_cerrar()
-        # Cerrar la ventana despues de 1.2 segundos
-        self.after(1200, self.destroy)
+        self.lbl_estado.configure(text="✅ Guardado correctamente", text_color="#10B981")
+        def _cerrar_y_notificar():
+            self.destroy()
+            if self.callback_cerrar:
+                self.callback_cerrar()
+        # Cerrar la ventana tras 500ms y notificar para abrir el siguiente turno si está en modo continuo
+        self.after(500, _cerrar_y_notificar)
 
     def _error(self, msg):
         self.lbl_estado.configure(text=f"Error: {msg}", text_color="#EF4444")

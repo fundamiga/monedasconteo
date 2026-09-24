@@ -25,7 +25,8 @@ import {
   ChevronDown,
   User,
   Settings,
-  AlertTriangle
+  AlertTriangle,
+  RotateCcw
 } from "lucide-react";
 
 export default function Home() {
@@ -77,6 +78,21 @@ export default function Home() {
 
   // Selección de Hoja de Cálculo: 'principal' por defecto
   const [hojaSeleccionada, setHojaSeleccionada] = useState("principal");
+
+  // Memoria de respaldo del último registro guardado o limpiado
+  const [ultimoRespaldo, setUltimoRespaldo] = useState(null);
+
+  const restaurarUltimoRespaldo = () => {
+    if (!ultimoRespaldo) return;
+    setMonedas(ultimoRespaldo.monedas || {});
+    setBilletes(ultimoRespaldo.billetes || {});
+    if (ultimoRespaldo.trabajador) setTrabajador(ultimoRespaldo.trabajador);
+    if (ultimoRespaldo.parqueadero) setParqueadero(ultimoRespaldo.parqueadero);
+    setMensaje({
+      tipo: "success",
+      texto: "↩️ ¡Datos del turno anterior recuperados en pantalla!"
+    });
+  };
 
   // Control de Fecha / Día del recaudo (Por defecto: día anterior)
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
@@ -452,6 +468,14 @@ export default function Home() {
 
       cargarTabla();
 
+      // Guardar respaldo de seguridad por si necesita recuperar lo recién guardado
+      setUltimoRespaldo({
+        monedas: { ...monedas },
+        billetes: { ...billetes },
+        trabajador: trabajadorGuardado,
+        parqueadero
+      });
+
       // AUTO-LIMPIAR CAMPOS SI ESTÁ ACTIVADO (POR DEFECTO TRUE)
       if (autoLimpiarAlGuardar) {
         setMonedas({
@@ -500,6 +524,18 @@ export default function Home() {
   };
 
   const limpiarTodo = (limpiarPersona = true) => {
+    // Si habia datos cargados, respaldar por si se borro por equivocacion
+    const tieneMonedas = Object.values(monedas || {}).some(v => Number(v) > 0);
+    const tieneBilletes = Object.values(billetes || {}).some(v => Number(v) > 0);
+    if (tieneMonedas || tieneBilletes || (trabajador && trabajador.trim())) {
+      setUltimoRespaldo({
+        monedas: { ...monedas },
+        billetes: { ...billetes },
+        trabajador: trabajador || "",
+        parqueadero: parqueadero || ""
+      });
+    }
+
     setMonedas({
       1000: 0,
       "200a": 0,
@@ -541,6 +577,19 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* BOTÓN DISCRETO RECUPERAR ANTERIOR (Solo aparece si hay algo en memoria) */}
+            {ultimoRespaldo && (
+              <button
+                type="button"
+                onClick={restaurarUltimoRespaldo}
+                className="text-xs bg-amber-950/70 border border-amber-600/60 hover:bg-amber-900 active:scale-95 text-amber-200 px-2 py-1.5 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
+                title="Recuperar los datos del turno anterior"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="text-[11px]">Recuperar</span>
+              </button>
+            )}
+
             <button
               onClick={() => limpiarTodo(true)}
               className="text-xs bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-300 px-2.5 py-1.5 rounded-lg font-medium transition"

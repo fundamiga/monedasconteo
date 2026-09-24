@@ -44,6 +44,8 @@ class AppCC358(ctk.CTk):
         self.worksheet = None
         self.monedas_actuales = {}
         self.modo_rapido = True          # Modo ventana emergente automática
+        self.modo_continuo = True        # Al guardar un turno, abre inmediatamente el siguiente en blanco
+        self.ultimo_respaldo = None      # Memoria del último conteo guardado para recuperar si se necesita
         self._ventana_abierta = False     # Para no abrir dos ventanas a la vez
         self.ventana_rapida_instancia = None # Referencia a la ventana rápida activa
         self.ventana_tabla = None         # Ventana opcional de Modo Tabla
@@ -173,8 +175,24 @@ class AppCC358(ctk.CTk):
             command=self._abrir_modo_camara)
         self.btn_modo_camara.pack(side="left", padx=4)
 
+        # Checkbox Modo Continuo (Auto-reabrir en 0 tras guardar)
+        self.chk_continuo = ctk.CTkCheckBox(
+            fila2, text="Auto-reabrir en 0", font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._toggle_modo_continuo)
+        if self.modo_continuo:
+            self.chk_continuo.select()
+        self.chk_continuo.pack(side="left", padx=(6, 4))
+
+        # Botón DISCRETO RECUPERAR ANTERIOR en PC
+        self.btn_recuperar_pc = ctk.CTkButton(
+            fila2, text="↩️ Recuperar", width=95, height=30,
+            fg_color="#78350F", hover_color="#92400E", text_color="#FDE68A",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._recuperar_anterior_pc)
+        self.btn_recuperar_pc.pack(side="left", padx=4)
+
         # Destino Hoja
-        ctk.CTkLabel(fila2, text="Destino:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(12, 4))
+        ctk.CTkLabel(fila2, text="Destino:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(10, 4))
         self.combo_hoja = ctk.CTkComboBox(
             fila2, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=130, height=30,
             command=self._on_cambio_hoja)
@@ -419,6 +437,49 @@ class AppCC358(ctk.CTk):
                 text="⚡ Modo Rapido", fg_color="#B45309", hover_color="#92400E")
             self._log("Modo Rapido desactivado.")
 
+    def _toggle_modo_continuo(self):
+        self.modo_continuo = bool(self.chk_continuo.get())
+        if self.modo_continuo:
+            self._log("⚡ Modo Continuo ACTIVO: Al guardar se abrirá automáticamente el siguiente turno en 0.")
+        else:
+            self._log("Modo Continuo desactivado: La ventana se cerrará tras guardar.")
+
+    def _recuperar_anterior_pc(self):
+        """Recupera los datos del último turno guardado o limpiado."""
+        if not self.ultimo_respaldo:
+            self._log("⚠️ No hay datos previos en memoria para recuperar.")
+            return
+
+        resp = self.ultimo_respaldo
+        self._log(f"↩️ Recuperando datos anteriores de {resp.get('trabajador', 'N/A')} ({resp.get('parqueadero', '')})...")
+
+        # 1. Si la ventana rápida está abierta, inyectar allí directamente
+        if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            self.ventana_rapida_instancia._recuperar_anterior()
+            self.ventana_rapida_instancia.lift()
+            self.ventana_rapida_instancia.focus()
+            return
+
+        # 2. Si no está abierta, abrir la ventana rápida y cargarle los datos
+        self._abrir_ventana_rapida(monedas=resp.get("monedas", {}))
+        if self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            self.after(80, self.ventana_rapida_instancia._recuperar_anterior)
+
+        # 3. Restaurar también en los campos de la ventana principal
+        if resp.get("monedas"):
+            self._mostrar_monedas(resp["monedas"])
+        if resp.get("billetes"):
+            for k, v in resp["billetes"].items():
+                if k in self.campos_billetes:
+                    self.campos_billetes[k].delete(0, "end")
+                    if v > 0:
+                        self.campos_billetes[k].insert(0, str(v))
+        if resp.get("trabajador"):
+            self.combo_trabajador.set(resp["trabajador"])
+        if resp.get("parqueadero"):
+            self.combo_parqueadero.set(resp["parqueadero"])
+        self._actualizar_totales()
+
     def _adelantar_nuevo_turno(self):
         """Abre la ventana de conteo por anticipado para escribir datos mientras la máquina cuenta."""
         if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
@@ -462,7 +523,10 @@ class AppCC358(ctk.CTk):
         def al_cerrar():
             self._ventana_abierta = False
             self.ventana_rapida_instancia = None
-            self._log("Guardado. Esperando siguiente conteo...")
+            self._log("Turno guardado. Esperando siguiente conteo...")
+            if self.modo_continuo:
+                # Reabrir automáticamente en 0 el siguiente turno
+                self.after(250, lambda: self._abrir_ventana_rapida(monedas={}))
 
         v = VentanaConteo(self, monedas, callback_cerrar=al_cerrar)
         self.ventana_rapida_instancia = v
@@ -516,6 +580,17 @@ class AppCC358(ctk.CTk):
 
     def _limpiar_todo(self):
         """Resetea todos los campos de monedas y billetes a cero."""
+        # Guardar respaldo antes de limpiar por si el usuario lo borro por error
+        monedas_prev = self._leer_monedas()
+        billetes_prev = self._leer_billetes()
+        if any(monedas_prev.values()) or any(billetes_prev.values()):
+            self.ultimo_respaldo = {
+                "monedas": monedas_prev,
+                "billetes": billetes_prev,
+                "trabajador": self.combo_trabajador.get(),
+                "parqueadero": self.combo_parqueadero.get()
+            }
+
         # Limpiar monedas
         for entry in self.campos_monedas.values():
             entry.configure(state="normal")
@@ -614,6 +689,12 @@ class AppCC358(ctk.CTk):
                 self._log(f"Nombre '{trabajador}' escrito en fila {fila}.")
 
             guardar_conteo(ws, fila, monedas, billetes)
+            self.ultimo_respaldo = {
+                "monedas": {**monedas},
+                "billetes": {**billetes},
+                "trabajador": trabajador,
+                "parqueadero": parqueadero
+            }
             tm, tb, tt = calcular_totales(monedas, billetes)
 
             self.after(0, self._resultado_ok,
