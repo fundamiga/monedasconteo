@@ -70,17 +70,19 @@ Responde ÚNICAMENTE en JSON:
       ],
       generationConfig: {
         temperature: 0.0,
+        response_mime_type: "application/json",
         thinkingConfig: {
           thinkingBudget: 0
         }
       }
     };
 
-    // Modelos en orden: el más rápido con thinkingBudget=0 primero
+    // Modelos ultra-rápidos: flash-lite responde en la mitad de tiempo manteniendo precisión total
     const modelos = [
-      "gemini-3.6-flash",
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite",
       "gemini-3.5-flash",
-      "gemini-3-flash-preview"
+      "gemini-flash-latest"
     ];
 
     let geminiRes = null;
