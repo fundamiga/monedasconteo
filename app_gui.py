@@ -272,8 +272,8 @@ class AppCC358(ctk.CTk):
                      font=ctk.CTkFont(size=13, weight="bold"),
                      text_color="#60A5FA").pack(anchor="w", padx=15, pady=(12, 4))
 
-        monedas_frame = ctk.CTkFrame(left, fg_color="#1F2937", corner_radius=8)
-        monedas_frame.pack(fill="x", padx=15, pady=2)
+        self.monedas_frame = ctk.CTkFrame(left, fg_color="#1F2937", corner_radius=8, border_width=2, border_color="#374151")
+        self.monedas_frame.pack(fill="x", padx=15, pady=2)
 
         self.campos_monedas = {}
         monedas_def = [
@@ -287,12 +287,12 @@ class AppCC358(ctk.CTk):
             ("$50 (B)", "50b"),
         ]
         for i, (label, key) in enumerate(monedas_def):
-            fila = ctk.CTkFrame(monedas_frame, fg_color="transparent")
+            fila = ctk.CTkFrame(self.monedas_frame, fg_color="transparent")
             fila.pack(fill="x", padx=10, pady=1)
             ctk.CTkLabel(fila, text=label, width=80,
                          font=ctk.CTkFont(weight="bold")).pack(side="left")
             entry = ctk.CTkEntry(fila, width=80, placeholder_text="0",
-                                 state="disabled")
+                                 state="disabled", border_color="#374151")
             entry.pack(side="left", padx=6)
             ctk.CTkLabel(fila, text="unidades", text_color="#9CA3AF").pack(side="left")
             self.campos_monedas[key] = entry
@@ -537,16 +537,31 @@ class AppCC358(ctk.CTk):
         ))
 
     def _mostrar_monedas(self, monedas):
-        """Actualiza los campos de monedas en la UI (hilo principal)."""
+        """Actualiza los campos de monedas en la UI con indicativo visual verde."""
+        tiene_monedas = any(v > 0 for v in monedas.values())
+        if hasattr(self, 'monedas_frame'):
+            self.monedas_frame.configure(border_color="#10B981" if tiene_monedas else "#374151")
+
         for key, entry in self.campos_monedas.items():
             entry.configure(state="normal")
             entry.delete(0, "end")
             val = monedas.get(key, 0)
             if val:
                 entry.insert(0, str(val))
+                entry.configure(border_color="#10B981", fg_color="#064E3B", text_color="#34D399")
+            else:
+                entry.configure(border_color="#374151", fg_color="#1F2937", text_color="#9CA3AF")
             entry.configure(state="disabled")
+
+        if tiene_monedas and hasattr(self, 'monedas_frame'):
+            try:
+                self.monedas_frame.configure(border_color="#34D399", border_width=3)
+                self.after(380, lambda: self.monedas_frame.configure(border_color="#10B981", border_width=2))
+            except Exception:
+                pass
+
         self._actualizar_totales()
-        self._log("Datos de conteo actualizados automaticamente.")
+        self._log("🟢 ¡Datos de conteo recibidos de la máquina CC358!")
 
     # ─────────────────────────────────────────
     # TOTALES
@@ -591,10 +606,13 @@ class AppCC358(ctk.CTk):
                 "parqueadero": self.combo_parqueadero.get()
             }
 
-        # Limpiar monedas
+        # Limpiar monedas y restaurar estilo neutro
+        if hasattr(self, 'monedas_frame'):
+            self.monedas_frame.configure(border_color="#374151", border_width=2)
         for entry in self.campos_monedas.values():
             entry.configure(state="normal")
             entry.delete(0, "end")
+            entry.configure(border_color="#374151", fg_color="#1F2937", text_color="#9CA3AF")
             entry.configure(state="disabled")
 
         # Limpiar billetes

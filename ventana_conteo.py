@@ -32,6 +32,7 @@ class VentanaConteo(ctk.CTkToplevel):
         self.callback_cerrar = callback_cerrar
         self.labels_cant_monedas = {}
         self.labels_subtotal_monedas = {}
+        self.filas_monedas = {}
 
         self.title("Nuevo Conteo CC358")
         ancho = 680
@@ -63,29 +64,37 @@ class VentanaConteo(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
+        tiene_monedas = any(v > 0 for v in self.monedas.values())
+
         # ── Título ──
         self.lbl_titulo = ctk.CTkLabel(
             self, 
-            text="Nuevo Conteo Recibido" if any(self.monedas.values()) else "⚡ Adelantar Conteo (Escribe datos mientras cuenta)",
+            text="✅ ¡Monedas Recibidas de la Máquina!" if tiene_monedas else "⚡ Adelantar Conteo (Escribe datos mientras cuenta)",
             font=ctk.CTkFont(size=15, weight="bold"),
-            text_color="#60A5FA" if any(self.monedas.values()) else "#FBBF24")
+            text_color="#34D399" if tiene_monedas else "#FBBF24")
         self.lbl_titulo.grid(row=0, column=0, columnspan=2, pady=(8, 4))
 
         # ── Panel MONEDAS (izquierda) ──
-        frame_mon = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=10)
-        frame_mon.grid(row=1, column=0, padx=(10, 5), pady=3, sticky="nsew")
+        self.frame_mon = ctk.CTkFrame(
+            self, 
+            fg_color="#1F2937", 
+            corner_radius=10,
+            border_width=2,
+            border_color="#10B981" if tiene_monedas else "#374151"
+        )
+        self.frame_mon.grid(row=1, column=0, padx=(10, 5), pady=3, sticky="nsew")
 
-        f_header_mon = ctk.CTkFrame(frame_mon, fg_color="transparent")
+        f_header_mon = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
         f_header_mon.pack(fill="x", padx=10, pady=(6, 2))
         ctk.CTkLabel(f_header_mon, text="MONEDAS (automático)",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color="#60A5FA").pack(side="left")
+                     text_color="#34D399" if tiene_monedas else "#60A5FA").pack(side="left")
         
         self.lbl_espera_print = ctk.CTkLabel(
             f_header_mon, 
-            text="" if any(self.monedas.values()) else "🟡 Esperando PRINT...",
+            text="🟢 ¡CONTEO RECIBIDO!" if tiene_monedas else "🟡 Esperando PRINT...",
             font=ctk.CTkFont(size=11, weight="bold"),
-            text_color="#FBBF24")
+            text_color="#34D399" if tiene_monedas else "#FBBF24")
         self.lbl_espera_print.pack(side="right")
 
         monedas_labels = [
@@ -112,33 +121,50 @@ class VentanaConteo(ctk.CTkToplevel):
             subtotal = cant * valores_monedas.get(key, 0)
             tm += subtotal
 
-            fila = ctk.CTkFrame(frame_mon, fg_color="transparent")
-            fila.pack(fill="x", padx=10, pady=0)
+            fila = ctk.CTkFrame(
+                self.frame_mon, 
+                fg_color="#064E3B" if cant > 0 else "transparent",
+                corner_radius=6
+            )
+            fila.pack(fill="x", padx=8, pady=1)
+            self.filas_monedas[key] = fila
+
             ctk.CTkLabel(fila, text=label, width=70,
-                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
-            lbl_c = ctk.CTkLabel(fila, text=f"{cant}",
-                         width=35, text_color="#10B981",
-                         font=ctk.CTkFont(size=12, weight="bold"))
+                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(4, 0))
+            lbl_c = ctk.CTkLabel(
+                fila, text=f"{cant}",
+                width=35, 
+                text_color="#34D399" if cant > 0 else "#6B7280",
+                font=ctk.CTkFont(size=13, weight="bold") if cant > 0 else ctk.CTkFont(size=12)
+            )
             lbl_c.pack(side="left")
             self.labels_cant_monedas[key] = lbl_c
 
-            ctk.CTkLabel(fila, text="uds",
-                         text_color="#6B7280", font=ctk.CTkFont(size=11)).pack(side="left", padx=(2, 6))
-            lbl_sub = ctk.CTkLabel(fila, text=fmt_cop(subtotal),
-                         text_color="#9CA3AF", font=ctk.CTkFont(size=11))
-            lbl_sub.pack(side="right")
+            ctk.CTkLabel(
+                fila, text="uds",
+                text_color="#9CA3AF" if cant > 0 else "#6B7280", 
+                font=ctk.CTkFont(size=11)
+            ).pack(side="left", padx=(2, 6))
+            lbl_sub = ctk.CTkLabel(
+                fila, text=fmt_cop(subtotal),
+                text_color="#A7F3D0" if cant > 0 else "#6B7280", 
+                font=ctk.CTkFont(size=11, weight="bold" if cant > 0 else "normal")
+            )
+            lbl_sub.pack(side="right", padx=(0, 4))
             self.labels_subtotal_monedas[key] = lbl_sub
 
         # Total monedas
-        sep = ctk.CTkFrame(frame_mon, height=1, fg_color="#374151")
+        sep = ctk.CTkFrame(self.frame_mon, height=1, fg_color="#374151")
         sep.pack(fill="x", padx=10, pady=3)
-        f_tm = ctk.CTkFrame(frame_mon, fg_color="transparent")
+        f_tm = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
         f_tm.pack(fill="x", padx=10, pady=(0, 6))
         ctk.CTkLabel(f_tm, text="Total monedas:",
                      font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
-        self.lbl_tm_valor = ctk.CTkLabel(f_tm, text=fmt_cop(tm),
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#60A5FA")
+        self.lbl_tm_valor = ctk.CTkLabel(
+            f_tm, text=fmt_cop(tm),
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#34D399" if tiene_monedas else "#60A5FA"
+        )
         self.lbl_tm_valor.pack(side="right")
 
         self._tm = tm
@@ -320,17 +346,46 @@ class VentanaConteo(ctk.CTkToplevel):
             subtotal = cant * valores_monedas.get(key, 0)
             tm += subtotal
             if key in self.labels_cant_monedas:
-                self.labels_cant_monedas[key].configure(text=str(cant))
+                self.labels_cant_monedas[key].configure(
+                    text=str(cant),
+                    text_color="#34D399" if cant > 0 else "#6B7280",
+                    font=ctk.CTkFont(size=13, weight="bold") if cant > 0 else ctk.CTkFont(size=12)
+                )
             if key in self.labels_subtotal_monedas:
-                self.labels_subtotal_monedas[key].configure(text=fmt_cop(subtotal))
+                self.labels_subtotal_monedas[key].configure(
+                    text=fmt_cop(subtotal),
+                    text_color="#A7F3D0" if cant > 0 else "#6B7280",
+                    font=ctk.CTkFont(size=11, weight="bold" if cant > 0 else "normal")
+                )
+            if key in self.filas_monedas:
+                self.filas_monedas[key].configure(
+                    fg_color="#064E3B" if cant > 0 else "transparent"
+                )
 
         self._tm = tm
-        self.lbl_tm_valor.configure(text=fmt_cop(tm))
-        self.lbl_espera_print.configure(text="✅ Conteo Recibido", text_color="#10B981")
-        self.lbl_titulo.configure(text="Nuevo Conteo Recibido", text_color="#60A5FA")
+        self.lbl_tm_valor.configure(text=fmt_cop(tm), text_color="#34D399", font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_espera_print.configure(text="🟢 ¡CONTEO RECIBIDO!", text_color="#34D399")
+        self.lbl_titulo.configure(text="✅ ¡Monedas Recibidas de la Máquina!", text_color="#34D399")
         self._actualizar_total()
+
+        # Destello verde para despertar visual inmediato
+        self._animar_destello_verde()
+
         # Enfocar botón guardar para confirmar con Enter
         self.btn_guardar.focus()
+
+    def _animar_destello_verde(self):
+        """Efecto visual de destello verde en el marco de monedas."""
+        try:
+            self.frame_mon.configure(border_color="#34D399", border_width=3, fg_color="#064E3B")
+            def _normalizar():
+                try:
+                    self.frame_mon.configure(border_color="#10B981", border_width=2, fg_color="#1F2937")
+                except Exception:
+                    pass
+            self.after(380, _normalizar)
+        except Exception:
+            pass
 
     def _leer_billetes(self):
         result = {}
