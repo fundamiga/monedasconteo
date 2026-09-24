@@ -106,6 +106,7 @@ class CC358Reader:
                             self.callback_datos(monedas)
                         else:
                             print("[PARSER AVISO] No se pudo extraer monedas de la trama.")
+                            self.callback_log("⚠️ Trama recibida pero no se reconocieron valores de monedas.")
 
                         buffer.clear()
                     time.sleep(0.03)

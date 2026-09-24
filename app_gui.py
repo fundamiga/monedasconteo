@@ -441,13 +441,17 @@ class AppCC358(ctk.CTk):
             seleccion = vals[0]
             for val in vals:
                 v_lower = val.lower()
-                if any(w in v_lower for w in ["ch340", "usb", "serial", "uart", "cp210"]):
+                if any(w in v_lower for w in ["ch340", "usb", "serial", "uart", "cp210", "ftdi", "prolific"]):
                     seleccion = val
                     break
             self.combo_puertos.set(seleccion)
+            self._log(f"🔍 Puertos detectados en este PC: {', '.join([p.device for p in puertos])}")
+            self._log(f"📌 Seleccionado: {seleccion}")
         else:
             self.combo_puertos.configure(values=["Sin puertos COM"])
             self.combo_puertos.set("Sin puertos COM")
+            self._log("⚠️ No se detectaron puertos COM en este equipo.")
+            self._log("👉 Verifica que el cable USB esté conectado y que el driver CH340 esté instalado.")
 
     def _toggle_autoconectar(self):
         self.auto_conectar = bool(self.chk_autoconectar.get())
