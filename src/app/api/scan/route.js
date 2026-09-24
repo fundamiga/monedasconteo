@@ -77,12 +77,12 @@ Responde ÚNICAMENTE en JSON:
       }
     };
 
-    // Modelos ultra-rápidos: flash-lite responde en la mitad de tiempo manteniendo precisión total
+    // Modelos estables y rápidos: gemini-3.5-flash responde en < 3s sin perder precisión
     const modelos = [
-      "gemini-3.1-flash-lite",
-      "gemini-3.5-flash-lite",
       "gemini-3.5-flash",
-      "gemini-flash-latest"
+      "gemini-3-flash-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-3.5-flash-lite"
     ];
 
     let geminiRes = null;
