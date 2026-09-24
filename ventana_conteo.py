@@ -26,43 +26,67 @@ class VentanaConteo(ctk.CTkToplevel):
     Se cierra sola al guardar.
     """
 
-    def __init__(self, parent, monedas, callback_cerrar=None):
+    def __init__(self, parent, monedas=None, callback_cerrar=None):
         super().__init__(parent)
-        self.monedas = monedas
+        self.monedas = monedas or {}
         self.callback_cerrar = callback_cerrar
+        self.labels_cant_monedas = {}
+        self.labels_subtotal_monedas = {}
 
         self.title("Nuevo Conteo CC358")
-        ancho = 670
-        alto = 645
-        self.geometry(f"{ancho}x{alto}")
-        self.resizable(False, False)
+        ancho = 680
+        self.resizable(True, True)
         self.attributes("-topmost", True)  # Siempre encima
+        self.minsize(640, 500)
 
-        # Centrar en pantalla con holgura vertical
-        self.update_idletasks()
-        x = max(0, (self.winfo_screenwidth() // 2) - (ancho // 2))
-        y = max(15, (self.winfo_screenheight() // 2) - (alto // 2) - 20)
-        self.geometry(f"{ancho}x{alto}+{x}+{y}")
-
+        # Construir UI primero para medir el tamaño real
         self._crear_ui()
+
+        # Ajustar posición: centrar X, Y=20 garantiza que siempre quede en pantalla
+        self.update_idletasks()
+        alto_real = self.winfo_reqheight()
+        x = max(0, (self.winfo_screenwidth() // 2) - (ancho // 2))
+        y = 20
+        self.geometry(f"{ancho}x{alto_real}+{x}+{y}")
+
+        # Enfocar primer campo de billetes o trabajador
+        self.after(200, self._enfocar_primer_campo)
+
+    def _enfocar_primer_campo(self):
+        try:
+            if "2000" in self.campos_billetes:
+                self.campos_billetes["2000"].focus()
+        except Exception:
+            pass
 
     def _crear_ui(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
 
         # ── Título ──
-        ctk.CTkLabel(self, text="Nuevo Conteo Recibido",
-                     font=ctk.CTkFont(size=18, weight="bold"),
-                     text_color="#60A5FA").grid(
-            row=0, column=0, columnspan=2, pady=(18, 8))
+        self.lbl_titulo = ctk.CTkLabel(
+            self, 
+            text="Nuevo Conteo Recibido" if any(self.monedas.values()) else "⚡ Adelantar Conteo (Escribe datos mientras cuenta)",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color="#60A5FA" if any(self.monedas.values()) else "#FBBF24")
+        self.lbl_titulo.grid(row=0, column=0, columnspan=2, pady=(8, 4))
 
         # ── Panel MONEDAS (izquierda) ──
         frame_mon = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=10)
-        frame_mon.grid(row=1, column=0, padx=(15, 7), pady=4, sticky="nsew")
+        frame_mon.grid(row=1, column=0, padx=(10, 5), pady=3, sticky="nsew")
 
-        ctk.CTkLabel(frame_mon, text="MONEDAS (automático)",
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#60A5FA").pack(anchor="w", padx=12, pady=(10, 4))
+        f_header_mon = ctk.CTkFrame(frame_mon, fg_color="transparent")
+        f_header_mon.pack(fill="x", padx=10, pady=(6, 2))
+        ctk.CTkLabel(f_header_mon, text="MONEDAS (automático)",
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color="#60A5FA").pack(side="left")
+        
+        self.lbl_espera_print = ctk.CTkLabel(
+            f_header_mon, 
+            text="" if any(self.monedas.values()) else "🟡 Esperando PRINT...",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#FBBF24")
+        self.lbl_espera_print.pack(side="right")
 
         monedas_labels = [
             ("$1.000",  "1000"),
@@ -89,37 +113,43 @@ class VentanaConteo(ctk.CTkToplevel):
             tm += subtotal
 
             fila = ctk.CTkFrame(frame_mon, fg_color="transparent")
-            fila.pack(fill="x", padx=12, pady=1)
-            ctk.CTkLabel(fila, text=label, width=75,
-                         font=ctk.CTkFont(weight="bold")).pack(side="left")
-            ctk.CTkLabel(fila, text=f"{cant}",
-                         width=40, text_color="#10B981",
-                         font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
-            ctk.CTkLabel(fila, text=f"uds",
-                         text_color="#6B7280").pack(side="left", padx=(2, 10))
-            ctk.CTkLabel(fila, text=fmt_cop(subtotal),
-                         text_color="#9CA3AF").pack(side="right")
+            fila.pack(fill="x", padx=10, pady=0)
+            ctk.CTkLabel(fila, text=label, width=70,
+                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+            lbl_c = ctk.CTkLabel(fila, text=f"{cant}",
+                         width=35, text_color="#10B981",
+                         font=ctk.CTkFont(size=12, weight="bold"))
+            lbl_c.pack(side="left")
+            self.labels_cant_monedas[key] = lbl_c
+
+            ctk.CTkLabel(fila, text="uds",
+                         text_color="#6B7280", font=ctk.CTkFont(size=11)).pack(side="left", padx=(2, 6))
+            lbl_sub = ctk.CTkLabel(fila, text=fmt_cop(subtotal),
+                         text_color="#9CA3AF", font=ctk.CTkFont(size=11))
+            lbl_sub.pack(side="right")
+            self.labels_subtotal_monedas[key] = lbl_sub
 
         # Total monedas
         sep = ctk.CTkFrame(frame_mon, height=1, fg_color="#374151")
-        sep.pack(fill="x", padx=12, pady=6)
+        sep.pack(fill="x", padx=10, pady=3)
         f_tm = ctk.CTkFrame(frame_mon, fg_color="transparent")
-        f_tm.pack(fill="x", padx=12, pady=(0, 10))
+        f_tm.pack(fill="x", padx=10, pady=(0, 6))
         ctk.CTkLabel(f_tm, text="Total monedas:",
-                     font=ctk.CTkFont(weight="bold")).pack(side="left")
-        ctk.CTkLabel(f_tm, text=fmt_cop(tm),
-                     font=ctk.CTkFont(size=14, weight="bold"),
-                     text_color="#60A5FA").pack(side="right")
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+        self.lbl_tm_valor = ctk.CTkLabel(f_tm, text=fmt_cop(tm),
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color="#60A5FA")
+        self.lbl_tm_valor.pack(side="right")
 
         self._tm = tm
 
         # ── Panel BILLETES (derecha) ──
         frame_bil = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=10)
-        frame_bil.grid(row=1, column=1, padx=(7, 15), pady=4, sticky="nsew")
+        frame_bil.grid(row=1, column=1, padx=(5, 10), pady=3, sticky="nsew")
 
         ctk.CTkLabel(frame_bil, text="BILLETES (manual)",
-                     font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#FBBF24").pack(anchor="w", padx=12, pady=(10, 4))
+                     font=ctk.CTkFont(size=12, weight="bold"),
+                     text_color="#FBBF24").pack(anchor="w", padx=10, pady=(6, 2))
 
         self.campos_billetes = {}
         billetes_def = [
@@ -132,98 +162,103 @@ class VentanaConteo(ctk.CTkToplevel):
         ]
         for label, key in billetes_def:
             fila = ctk.CTkFrame(frame_bil, fg_color="transparent")
-            fila.pack(fill="x", padx=12, pady=3)
-            ctk.CTkLabel(fila, text=label, width=80,
-                         font=ctk.CTkFont(weight="bold")).pack(side="left")
-            entry = ctk.CTkEntry(fila, width=65, placeholder_text="0")
-            entry.pack(side="left", padx=6)
-            ctk.CTkLabel(fila, text="uds", text_color="#9CA3AF").pack(side="left")
+            fila.pack(fill="x", padx=10, pady=1)
+            ctk.CTkLabel(fila, text=label, width=75,
+                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+            entry = ctk.CTkEntry(fila, width=55, placeholder_text="0", height=26)
+            entry.pack(side="left", padx=4)
+            ctk.CTkLabel(fila, text="uds", text_color="#9CA3AF",
+                         font=ctk.CTkFont(size=11)).pack(side="left")
             entry.bind("<KeyRelease>", lambda e: self._actualizar_total())
             self.campos_billetes[key] = entry
 
         # Total billetes
         sep2 = ctk.CTkFrame(frame_bil, height=1, fg_color="#374151")
-        sep2.pack(fill="x", padx=12, pady=6)
+        sep2.pack(fill="x", padx=10, pady=3)
         f_tb = ctk.CTkFrame(frame_bil, fg_color="transparent")
-        f_tb.pack(fill="x", padx=12)
+        f_tb.pack(fill="x", padx=10, pady=(0, 6))
         ctk.CTkLabel(f_tb, text="Total billetes:",
-                     font=ctk.CTkFont(weight="bold")).pack(side="left")
+                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
         self.lbl_tb = ctk.CTkLabel(f_tb, text="$ 0",
-                                    font=ctk.CTkFont(size=14, weight="bold"),
+                                    font=ctk.CTkFont(size=13, weight="bold"),
                                     text_color="#FBBF24")
         self.lbl_tb.pack(side="right")
 
         # ── Datos del turno ──
         frame_datos = ctk.CTkFrame(self, fg_color="#111827", corner_radius=10)
         frame_datos.grid(row=2, column=0, columnspan=2,
-                         padx=15, pady=8, sticky="ew")
+                         padx=10, pady=4, sticky="ew")
         frame_datos.grid_columnconfigure(1, weight=1)
         frame_datos.grid_columnconfigure(3, weight=1)
 
         # Trabajador
-        ctk.CTkLabel(frame_datos, text="Trabajador:").grid(
-            row=0, column=0, padx=(12, 6), pady=8, sticky="w")
+        ctk.CTkLabel(frame_datos, text="Trabajador:",
+                     font=ctk.CTkFont(size=12)).grid(
+            row=0, column=0, padx=(10, 4), pady=5, sticky="w")
         self.combo_trabajador = SelectorTrabajador(
             frame_datos, width=240)
         self.combo_trabajador.set(TRABAJADORES[0])
-        self.combo_trabajador.grid(row=0, column=1, padx=6, pady=8, sticky="ew")
+        self.combo_trabajador.grid(row=0, column=1, padx=4, pady=5, sticky="ew")
 
         # Parqueadero
-        ctk.CTkLabel(frame_datos, text="Parqueadero:").grid(
-            row=0, column=2, padx=(12, 6), pady=8, sticky="w")
+        ctk.CTkLabel(frame_datos, text="Parqueadero:",
+                     font=ctk.CTkFont(size=12)).grid(
+            row=0, column=2, padx=(10, 4), pady=5, sticky="w")
         self.combo_parqueadero = ctk.CTkComboBox(
-            frame_datos, values=PARQUEADEROS, width=130)
+            frame_datos, values=PARQUEADEROS, width=130, height=28)
         self.combo_parqueadero.set(PARQUEADEROS[0])
-        self.combo_parqueadero.grid(row=0, column=3, padx=(6, 12), pady=8, sticky="ew")
+        self.combo_parqueadero.grid(row=0, column=3, padx=(4, 10), pady=5, sticky="ew")
 
         # Hoja Destino y Fecha del Recaudo
-        ctk.CTkLabel(frame_datos, text="Destino Hoja:").grid(
-            row=1, column=0, padx=(12, 6), pady=(0, 8), sticky="w")
+        ctk.CTkLabel(frame_datos, text="Destino Hoja:",
+                     font=ctk.CTkFont(size=12)).grid(
+            row=1, column=0, padx=(10, 4), pady=(0, 5), sticky="w")
         self.combo_hoja = ctk.CTkComboBox(
-            frame_datos, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=140)
-        self.combo_hoja.set("📁 Pruebas")
-        self.combo_hoja.grid(row=1, column=1, padx=6, pady=(0, 8), sticky="w")
+            frame_datos, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=140, height=28)
+        self.combo_hoja.set("⚠️ PRINCIPAL")
+        self.combo_hoja.grid(row=1, column=1, padx=4, pady=(0, 5), sticky="w")
 
-        ctk.CTkLabel(frame_datos, text="Fecha:").grid(
-            row=1, column=2, padx=(12, 6), pady=(0, 8), sticky="w")
+        ctk.CTkLabel(frame_datos, text="Fecha:",
+                     font=ctk.CTkFont(size=12)).grid(
+            row=1, column=2, padx=(10, 4), pady=(0, 5), sticky="w")
 
         f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
-        f_dia.grid(row=1, column=3, padx=(6, 12), pady=(0, 8), sticky="ew")
+        f_dia.grid(row=1, column=3, padx=(4, 10), pady=(0, 5), sticky="ew")
 
         from datetime import datetime, timedelta
         ayer_dia = (datetime.now() - timedelta(days=1)).day
         dias_opciones = [f"Dia {d} (Ayer)" if d == ayer_dia else f"Dia {d} (Hoy)" if d == datetime.now().day else f"Dia {d}" for d in range(1, 32)]
 
         self.combo_dia = ctk.CTkComboBox(
-            f_dia, values=dias_opciones, width=150,
+            f_dia, values=dias_opciones, width=140, height=28,
             command=self._on_cambio_dia)
         self.combo_dia.set(f"Dia {ayer_dia} (Ayer)")
         self.combo_dia.pack(side="left")
 
         self.lbl_fecha_txt = ctk.CTkLabel(
             f_dia, text=obtener_fecha_hoy(ayer_dia),
-            text_color="#10B981", font=ctk.CTkFont(weight="bold"))
-        self.lbl_fecha_txt.pack(side="left", padx=10)
+            text_color="#10B981", font=ctk.CTkFont(size=12, weight="bold"))
+        self.lbl_fecha_txt.pack(side="left", padx=8)
 
         # ── Total turno ──
         frame_total = ctk.CTkFrame(self, fg_color="#064E3B", corner_radius=10)
         frame_total.grid(row=3, column=0, columnspan=2,
-                         padx=15, pady=4, sticky="ew")
+                         padx=10, pady=3, sticky="ew")
         ctk.CTkLabel(frame_total, text="TOTAL TURNO:",
-                     font=ctk.CTkFont(size=15, weight="bold")).pack(side="left", padx=20, pady=10)
+                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=16, pady=7)
         self.lbl_total = ctk.CTkLabel(frame_total, text=fmt_cop(tm),
-                                       font=ctk.CTkFont(size=20, weight="bold"),
+                                       font=ctk.CTkFont(size=18, weight="bold"),
                                        text_color="#10B981")
-        self.lbl_total.pack(side="right", padx=20, pady=10)
+        self.lbl_total.pack(side="right", padx=16, pady=7)
 
         # ── Botones ──
         frame_btns = ctk.CTkFrame(self, fg_color="transparent")
         frame_btns.grid(row=4, column=0, columnspan=2,
-                        padx=15, pady=(8, 15), sticky="ew")
+                        padx=10, pady=(5, 10), sticky="ew")
 
         ctk.CTkButton(frame_btns, text="Cancelar",
                       fg_color="#374151", hover_color="#4B5563",
-                      width=100, command=self.destroy).pack(side="left", padx=6)
+                      width=100, height=36, command=self.destroy).pack(side="left", padx=6)
 
         self.lbl_estado = ctk.CTkLabel(frame_btns, text="",
                                         text_color="#9CA3AF")
@@ -234,9 +269,38 @@ class VentanaConteo(ctk.CTkToplevel):
             text="💾 GUARDAR Y CERRAR",
             fg_color="#107C41", hover_color="#0B5C30",
             font=ctk.CTkFont(size=14, weight="bold"),
-            width=200, height=40,
+            width=200, height=38,
             command=self._guardar)
         self.btn_guardar.pack(side="right", padx=6)
+
+        # Atajo Enter para guardar rápidamente
+        self.bind("<Return>", lambda e: self._guardar())
+
+    def recibir_conteo(self, nuevas_monedas):
+        """Inyecta el conteo de la CC358 en vivo cuando la máquina manda PRINT."""
+        self.monedas = nuevas_monedas
+        valores_monedas = {
+            "1000": 1000, "500": 500,
+            "200a": 200, "200b": 200,
+            "100a": 100, "100b": 100,
+            "50a": 50, "50b": 50
+        }
+        tm = 0
+        for key, cant in nuevas_monedas.items():
+            subtotal = cant * valores_monedas.get(key, 0)
+            tm += subtotal
+            if key in self.labels_cant_monedas:
+                self.labels_cant_monedas[key].configure(text=str(cant))
+            if key in self.labels_subtotal_monedas:
+                self.labels_subtotal_monedas[key].configure(text=fmt_cop(subtotal))
+
+        self._tm = tm
+        self.lbl_tm_valor.configure(text=fmt_cop(tm))
+        self.lbl_espera_print.configure(text="✅ Conteo Recibido", text_color="#10B981")
+        self.lbl_titulo.configure(text="Nuevo Conteo Recibido", text_color="#60A5FA")
+        self._actualizar_total()
+        # Enfocar botón guardar para confirmar con Enter
+        self.btn_guardar.focus()
 
     def _leer_billetes(self):
         result = {}

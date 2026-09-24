@@ -75,8 +75,8 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
-  // Selección de Hoja de Cálculo: 'pruebas' o 'principal'
-  const [hojaSeleccionada, setHojaSeleccionada] = useState("pruebas");
+  // Selección de Hoja de Cálculo: 'principal' por defecto
+  const [hojaSeleccionada, setHojaSeleccionada] = useState("principal");
 
   // Control de Fecha / Día del recaudo (Por defecto: día anterior)
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {

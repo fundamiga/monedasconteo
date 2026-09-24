@@ -23,7 +23,16 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive'
 ]
 
-CREDS_FILE = "config/credentials.json"
+import os
+import sys
+
+def obtener_ruta_base():
+    """Resuelve la ruta correcta tanto en modo script como dentro de un .exe de PyInstaller."""
+    if hasattr(sys, '_MEIPASS'):
+        return sys._MEIPASS
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+CREDS_FILE = os.path.join(obtener_ruta_base(), "config", "credentials.json")
 
 
 def conectar_sheet(tipo_hoja="pruebas"):

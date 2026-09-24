@@ -1,7 +1,12 @@
-"""
-Interfaz Gráfica Principal - Sistema de Recaudo CC358
-Monedas automáticas desde CC358 + Billetes manuales → Google Sheets
-"""
+import sys
+import os
+
+# En aplicaciones empaquetadas con console=False (noconsole), sys.stdout y sys.stderr son None
+# y cualquier biblioteca (como pyserial o logging) que intente escribir falla en silencio.
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
 
 import threading
 import customtkinter as ctk
@@ -40,10 +45,30 @@ class AppCC358(ctk.CTk):
         self.monedas_actuales = {}
         self.modo_rapido = True          # Modo ventana emergente automática
         self._ventana_abierta = False     # Para no abrir dos ventanas a la vez
+        self.ventana_rapida_instancia = None # Referencia a la ventana rápida activa
         self.ventana_tabla = None         # Ventana opcional de Modo Tabla
 
         self._crear_ui()
         self._actualizar_puertos()
+
+        # Atajo global en toda la aplicación: Barra espaciadora y tecla F1
+        self.bind_all("<F1>", lambda e: self._adelantar_nuevo_turno())
+        self.bind_all("<space>", self._on_space_pressed)
+
+    def _on_space_pressed(self, event):
+        # Si ya hay una ventana rápida abierta, no hacer nada para permitir espacios en sus campos
+        if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            return
+
+        # Si el usuario está escribiendo dentro de un campo de texto en la ventana principal, respetar el espacio
+        try:
+            focused = self.focus_get()
+            if focused and focused.winfo_class() in ("Entry", "Text", "TEntry"):
+                return
+        except Exception:
+            pass
+
+        self._adelantar_nuevo_turno()
 
     # ─────────────────────────────────────────
     # CONSTRUCCIÓN DE LA UI
@@ -60,92 +85,108 @@ class AppCC358(ctk.CTk):
 
     def _crear_barra_conexion(self):
         top = ctk.CTkFrame(self, corner_radius=10)
-        top.grid(row=0, column=0, columnspan=2, padx=15, pady=(15, 8), sticky="ew")
+        top.grid(row=0, column=0, columnspan=2, padx=15, pady=(10, 5), sticky="ew")
 
-        ctk.CTkLabel(top, text="🪙 Recaudo CC358",
-                     font=ctk.CTkFont(size=19, weight="bold")).pack(side="left", padx=15, pady=10)
+        # ── FILA 1: CONEXIÓN SERIAL + ACCIONES PRINCIPALES ──
+        fila1 = ctk.CTkFrame(top, fg_color="transparent")
+        fila1.pack(fill="x", padx=10, pady=(8, 4))
+
+        ctk.CTkLabel(fila1, text="🪙 CC358 Recaudo",
+                     font=ctk.CTkFont(size=18, weight="bold"),
+                     text_color="#60A5FA").pack(side="left", padx=(4, 12))
 
         # Puerto COM
-        self.combo_puertos = ctk.CTkComboBox(top, values=["Buscando..."], width=200)
-        self.combo_puertos.pack(side="left", padx=6, pady=10)
-        ctk.CTkButton(top, text="🔄", width=34,
+        self.combo_puertos = ctk.CTkComboBox(fila1, values=["Buscando..."], width=170)
+        self.combo_puertos.pack(side="left", padx=4)
+        ctk.CTkButton(fila1, text="🔄", width=32,
                       command=self._actualizar_puertos).pack(side="left", padx=2)
 
-        ctk.CTkLabel(top, text="Baud:").pack(side="left", padx=(10, 3))
+        ctk.CTkLabel(fila1, text="Baud:").pack(side="left", padx=(8, 2))
         self.combo_baud = ctk.CTkComboBox(
-            top, values=["9600", "4800", "19200", "38400", "115200"], width=80)
+            fila1, values=["9600", "4800", "19200", "38400", "115200"], width=75)
         self.combo_baud.set("9600")
-        self.combo_baud.pack(side="left", padx=3, pady=10)
+        self.combo_baud.pack(side="left", padx=2)
 
-        # Botón Simulación
-        self.btn_sim = ctk.CTkButton(
-            top, text="▶ Simulación", width=110,
-            fg_color="#6B7280", hover_color="#4B5563",
-            command=self._toggle_simulacion)
-        self.btn_sim.pack(side="left", padx=6, pady=10)
-
-        # Botón MODO RÁPIDO (Popup automático)
-        self.btn_modo_rapido = ctk.CTkButton(
-            top, text="⚡ Modo Rapido ON", width=130,
-            fg_color="#D97706", hover_color="#B45309",
-            font=ctk.CTkFont(weight="bold"),
-            command=self._toggle_modo_rapido)
-        self.btn_modo_rapido.pack(side="left", padx=4, pady=10)
-
-        # Botón MODO TABLA EXCEL (Ventana interactiva de filas)
-        self.btn_modo_tabla = ctk.CTkButton(
-            top, text="📊 Modo Tabla", width=115,
-            fg_color="#2563EB", hover_color="#1D4ED8",
-            font=ctk.CTkFont(weight="bold"),
-            command=self._abrir_modo_tabla)
-        self.btn_modo_tabla.pack(side="left", padx=4, pady=10)
-
-        # Selector de Hoja: Pruebas vs Principal
-        ctk.CTkLabel(top, text="Destino:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(10, 2), pady=10)
-        self.combo_hoja = ctk.CTkComboBox(
-            top, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=130,
-            command=self._on_cambio_hoja)
-        self.combo_hoja.set("📁 Pruebas")
-        self.combo_hoja.pack(side="left", padx=4, pady=10)
-
-        # Botón MODO CÁMARA OCR
-        self.btn_modo_camara = ctk.CTkButton(
-            top, text="📷 Modo Cámara", width=120,
-            fg_color="#0D9488", hover_color="#0F766E",
-            font=ctk.CTkFont(weight="bold"),
-            command=self._abrir_modo_camara)
-        self.btn_modo_camara.pack(side="left", padx=4, pady=10)
-
-        # Botón Conectar
+        # Botón Conectar COM (BIEN VISIBLE A LA IZQUIERDA)
         self.btn_conectar = ctk.CTkButton(
-            top, text="Conectar COM", width=120,
+            fila1, text="⚡ Conectar COM", width=130, height=34,
             fg_color="#2FA572", hover_color="#1E7B54",
             font=ctk.CTkFont(weight="bold"),
             command=self._toggle_conexion)
-        self.btn_conectar.pack(side="right", padx=8, pady=10)
+        self.btn_conectar.pack(side="left", padx=10)
 
         self.lbl_status = ctk.CTkLabel(
-            top, text="🔴 Desconectado",
+            fila1, text="🔴 Desconectado",
             text_color="#FF6B6B",
             font=ctk.CTkFont(size=12, weight="bold"))
-        self.lbl_status.pack(side="right", padx=8)
+        self.lbl_status.pack(side="left", padx=6)
 
-        # Botón GUARDAR siempre visible en la barra superior
+        # A la derecha de fila 1: GUARDAR y LIMPIAR
+        ctk.CTkButton(
+            fila1, text="🔄 Limpiar",
+            fg_color="#4B5563", hover_color="#374151",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            width=85, height=34,
+            command=self._limpiar_todo).pack(side="right", padx=4)
+
         self.btn_guardar_top = ctk.CTkButton(
-            top, text="💾 GUARDAR",
+            fila1, text="💾 GUARDAR",
             fg_color="#107C41", hover_color="#0B5C30",
             font=ctk.CTkFont(size=13, weight="bold"),
-            width=130, height=36,
+            width=120, height=34,
             command=self._guardar_en_sheets)
-        self.btn_guardar_top.pack(side="right", padx=6, pady=10)
+        self.btn_guardar_top.pack(side="right", padx=4)
 
-        # Botón LIMPIAR / DESDE CERO
-        ctk.CTkButton(
-            top, text="🔄 Limpiar",
-            fg_color="#7C3AED", hover_color="#5B21B6",
-            font=ctk.CTkFont(size=13, weight="bold"),
-            width=95, height=36,
-            command=self._limpiar_todo).pack(side="right", padx=4, pady=10)
+        # ── FILA 2: MODOS Y HERRAMIENTAS ──
+        fila2 = ctk.CTkFrame(top, fg_color="transparent")
+        fila2.pack(fill="x", padx=10, pady=(2, 8))
+
+        # Botón ADELANTAR TURNO
+        self.btn_adelantar = ctk.CTkButton(
+            fila2, text="➕ Nuevo Turno [Espacio]", width=175, height=30,
+            fg_color="#059669", hover_color="#047857",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._adelantar_nuevo_turno)
+        self.btn_adelantar.pack(side="left", padx=(4, 6))
+
+        # Botón MODO RÁPIDO ON/OFF
+        self.btn_modo_rapido = ctk.CTkButton(
+            fila2, text="⚡ Modo Rapido ON", width=135, height=30,
+            fg_color="#D97706", hover_color="#B45309",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._toggle_modo_rapido)
+        self.btn_modo_rapido.pack(side="left", padx=4)
+
+        # Botón MODO TABLA
+        self.btn_modo_tabla = ctk.CTkButton(
+            fila2, text="📊 Modo Tabla", width=110, height=30,
+            fg_color="#2563EB", hover_color="#1D4ED8",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._abrir_modo_tabla)
+        self.btn_modo_tabla.pack(side="left", padx=4)
+
+        # Botón CÁMARA
+        self.btn_modo_camara = ctk.CTkButton(
+            fila2, text="📷 Cámara OCR", width=110, height=30,
+            fg_color="#0D9488", hover_color="#0F766E",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._abrir_modo_camara)
+        self.btn_modo_camara.pack(side="left", padx=4)
+
+        # Destino Hoja
+        ctk.CTkLabel(fila2, text="Destino:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(12, 4))
+        self.combo_hoja = ctk.CTkComboBox(
+            fila2, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=130, height=30,
+            command=self._on_cambio_hoja)
+        self.combo_hoja.set("⚠️ PRINCIPAL")
+        self.combo_hoja.pack(side="left", padx=2)
+
+        # Botón Simulación
+        self.btn_sim = ctk.CTkButton(
+            fila2, text="▶ Simulación", width=105, height=30,
+            fg_color="#6B7280", hover_color="#4B5563",
+            command=self._toggle_simulacion)
+        self.btn_sim.pack(side="right", padx=4)
 
     def _abrir_modo_camara(self):
         """Abre la ventana de captura con cámara web y OCR."""
@@ -378,6 +419,16 @@ class AppCC358(ctk.CTk):
                 text="⚡ Modo Rapido", fg_color="#B45309", hover_color="#92400E")
             self._log("Modo Rapido desactivado.")
 
+    def _adelantar_nuevo_turno(self):
+        """Abre la ventana de conteo por anticipado para escribir datos mientras la máquina cuenta."""
+        if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            self.ventana_rapida_instancia.lift()
+            self.ventana_rapida_instancia.focus()
+            return
+
+        self._log("⚡ Adelantando nuevo turno: ingresa trabajador y billetes mientras la máquina cuenta...")
+        self._abrir_ventana_rapida(monedas={})
+
     # ─────────────────────────────────────────
     # CALLBACK DATOS CC358
     # ─────────────────────────────────────────
@@ -390,6 +441,13 @@ class AppCC358(ctk.CTk):
         if self.ventana_tabla and self.ventana_tabla.winfo_exists():
             self.after(0, self.ventana_tabla.recibir_conteo_monedas, monedas)
 
+        # Si la ventana rápida ya está abierta esperándolo, inyectarle los datos
+        if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            self._log("📥 Inyectando conteo recibido en la ventana activa...")
+            self.after(0, self.ventana_rapida_instancia.recibir_conteo, monedas)
+            return
+
+        # Si no estaba abierta y Modo Rápido está activo, abrirla normalmente
         if self.modo_rapido and not self._ventana_abierta:
             self.after(0, self._abrir_ventana_rapida, monedas)
         else:
@@ -399,14 +457,20 @@ class AppCC358(ctk.CTk):
     def _abrir_ventana_rapida(self, monedas):
         """Abre la ventana emergente de conteo rápido."""
         self._ventana_abierta = True
-        self._log("Abriendo ventana rapida de conteo...")
+        self._log("Abriendo ventana rápida de conteo...")
 
         def al_cerrar():
             self._ventana_abierta = False
+            self.ventana_rapida_instancia = None
             self._log("Guardado. Esperando siguiente conteo...")
 
         v = VentanaConteo(self, monedas, callback_cerrar=al_cerrar)
-        v.protocol("WM_DELETE_WINDOW", lambda: (setattr(self, '_ventana_abierta', False), v.destroy()))
+        self.ventana_rapida_instancia = v
+        v.protocol("WM_DELETE_WINDOW", lambda: (
+            setattr(self, '_ventana_abierta', False),
+            setattr(self, 'ventana_rapida_instancia', None),
+            v.destroy()
+        ))
 
     def _mostrar_monedas(self, monedas):
         """Actualiza los campos de monedas en la UI (hilo principal)."""

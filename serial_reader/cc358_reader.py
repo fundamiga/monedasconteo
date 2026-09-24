@@ -52,6 +52,8 @@ class CC358Reader:
             # Señales DTR/RTS requeridas para comunicación fluida
             self.ser.dtr = True
             self.ser.rts = True
+            self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
 
             self.activo = True
             self.callback_log(f"🟢 Conectado a {puerto} @ {baudrate} baudios (SAT CC358 lista).")
@@ -84,12 +86,14 @@ class CC358Reader:
                     datos = self.ser.read(en_espera)
                     buffer.extend(datos)
                     ultimo = time.time()
+                    print(f"[SERIAL BYTES] +{len(datos)} bytes recibidos (total buffer: {len(buffer)})")
                 else:
                     # Si pasaron más de 300ms sin nuevos bytes y hay datos acumulados
                     if len(buffer) > 0 and (time.time() - ultimo > 0.3):
                         timestamp = datetime.now().strftime("%H:%M:%S")
                         texto = buffer.decode("latin1", errors="replace")
 
+                        print(f"[SERIAL TRAMA COMPLETA] {len(buffer)} bytes:\n{texto}")
                         self.callback_log(
                             f"\n📥 [{timestamp}] Trama recibida de SAT CC358 ({len(buffer)} bytes):\n"
                             + texto.strip()
@@ -98,11 +102,15 @@ class CC358Reader:
                         # Parsear los datos de la CC358
                         monedas = self._parsear(buffer)
                         if monedas:
+                            print(f"[PARSER EXITOSO] Monedas: {monedas}")
                             self.callback_datos(monedas)
+                        else:
+                            print("[PARSER AVISO] No se pudo extraer monedas de la trama.")
 
                         buffer.clear()
                     time.sleep(0.03)
             except Exception as e:
+                print(f"[SERIAL ERROR]: {e}")
                 self.callback_log(f"⚠️ Error en lectura: {e}")
                 break
 
