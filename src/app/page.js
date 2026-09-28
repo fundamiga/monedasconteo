@@ -26,7 +26,10 @@ import {
   User,
   Settings,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Zap,
+  Radio,
+  Wifi
 } from "lucide-react";
 
 export default function Home() {
@@ -93,6 +96,64 @@ export default function Home() {
       texto: "↩️ ¡Datos del turno anterior recuperados en pantalla!"
     });
   };
+
+  // Sincronización inalámbrica con la máquina CC358 vía PC
+  const [ultimoConteoRemoto, setUltimoConteoRemoto] = useState(null);
+  const [ultimoTimestampCargado, setUltimoTimestampCargado] = useState(0);
+  const [autoCargarRemoto, setAutoCargarRemoto] = useState(true);
+
+  const formatTiempoRelativo = (timestamp) => {
+    if (!timestamp) return "";
+    const diffSeg = Math.max(0, Math.round((Date.now() - timestamp) / 1000));
+    if (diffSeg < 5) return "hace unos segundos";
+    if (diffSeg < 60) return `hace ${diffSeg} seg`;
+    const min = Math.floor(diffSeg / 60);
+    return `hace ${min} min`;
+  };
+
+  const aplicarConteoRemoto = (conteo) => {
+    if (!conteo || !conteo.monedas) return;
+    setMonedas(conteo.monedas);
+    setUltimoTimestampCargado(conteo.timestamp);
+    setMensaje({
+      tipo: "success",
+      texto: `⚡ ¡Monedas de la máquina CC358 cargadas ($ ${Number(conteo.total || 0).toLocaleString("es-CO")})!`
+    });
+  };
+
+  // Consultar periódicamente si el PC envió un nuevo PRINT de la CC358
+  useEffect(() => {
+    let activo = true;
+
+    const verificarConteo = async () => {
+      try {
+        const res = await fetch("/api/cc358-sync");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (activo && data.disponible && data.conteo) {
+          setUltimoConteoRemoto(data.conteo);
+          // Si es un conteo nuevo y auto-cargar está activo
+          if (data.conteo.timestamp > ultimoTimestampCargado && autoCargarRemoto && ultimoTimestampCargado > 0) {
+            setMonedas(data.conteo.monedas);
+            setUltimoTimestampCargado(data.conteo.timestamp);
+            setMensaje({
+              tipo: "success",
+              texto: `⚡ ¡Nuevo conteo CC358 aplicado automáticamente ($ ${Number(data.conteo.total || 0).toLocaleString("es-CO")})!`
+            });
+          }
+        }
+      } catch (e) {
+        // Silencioso
+      }
+    };
+
+    verificarConteo();
+    const interval = setInterval(verificarConteo, 2000);
+    return () => {
+      activo = false;
+      clearInterval(interval);
+    };
+  }, [ultimoTimestampCargado, autoCargarRemoto]);
 
   // Control de Fecha / Día del recaudo (Por defecto: día anterior)
   const [diaSeleccionado, setDiaSeleccionado] = useState(() => {
@@ -800,6 +861,58 @@ export default function Home() {
       <div className="p-4 space-y-4 flex-1">
         {tab === "scan" ? (
           <>
+            {/* ─── PANEL SINCRONIZACIÓN INALÁMBRICA CC358 ─── */}
+            {ultimoConteoRemoto && ultimoConteoRemoto.timestamp !== ultimoTimestampCargado ? (
+              <div className="bg-emerald-950/60 border-2 border-emerald-500/80 rounded-2xl p-4 flex flex-col gap-3 shadow-lg shadow-emerald-900/40">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-emerald-500/20">
+                    <Radio className="w-5 h-5 text-emerald-400" />
+                    <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="absolute top-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-emerald-200">⚡ ¡La máquina envió un conteo!</p>
+                    <p className="text-[11px] text-emerald-400/80">{formatTiempoRelativo(ultimoConteoRemoto.timestamp)} — $ {Number(ultimoConteoRemoto.total || 0).toLocaleString("es-CO")}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => aplicarConteoRemoto(ultimoConteoRemoto)}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-emerald-700/40 flex items-center justify-center gap-2 transition text-sm"
+                >
+                  <Zap className="w-4 h-4" />
+                  CARGAR MONEDAS DE LA MÁQUINA
+                </button>
+              </div>
+            ) : ultimoConteoRemoto && ultimoConteoRemoto.timestamp === ultimoTimestampCargado ? (
+              <div className="bg-slate-900/80 border border-emerald-800/50 rounded-2xl p-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-900/60 flex items-center justify-center shrink-0">
+                  <Wifi className="w-4 h-4 text-emerald-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-emerald-300">Conectado con la máquina CC358</p>
+                  <p className="text-[10px] text-slate-500">Último conteo: {formatTiempoRelativo(ultimoConteoRemoto.timestamp)} • Esperando nuevo PRINT...</p>
+                </div>
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3].map((i) => (
+                      <span key={i} className="w-1 bg-emerald-500 rounded-full animate-pulse" style={{ height: `${8 + i * 4}px`, animationDelay: `${i * 0.15}s` }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
+                  <Radio className="w-4 h-4 text-slate-500" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold text-slate-400">Esperando señal de la máquina CC358...</p>
+                  <p className="text-[10px] text-slate-600">Cuando el PC reciba un PRINT, aparecerá aquí automáticamente.</p>
+                </div>
+              </div>
+            )}
+
             {/* SUB-SELECTOR: CÁMARA EN VIVO vs SUBIR FOTO */}
             <div className="flex bg-slate-950/60 p-1 rounded-xl border border-slate-800 text-xs font-medium">
               <button

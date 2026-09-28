@@ -26,10 +26,11 @@ class VentanaConteo(ctk.CTkToplevel):
     Se cierra sola al guardar.
     """
 
-    def __init__(self, parent, monedas=None, callback_cerrar=None):
+    def __init__(self, parent, monedas=None, callback_cerrar=None, auto_guardar_print=None):
         super().__init__(parent)
         self.monedas = monedas or {}
         self.callback_cerrar = callback_cerrar
+        self.auto_guardar_print = auto_guardar_print if auto_guardar_print is not None else getattr(parent, 'auto_guardar_print', False)
         self.labels_cant_monedas = {}
         self.labels_subtotal_monedas = {}
         self.filas_monedas = {}
@@ -371,8 +372,13 @@ class VentanaConteo(ctk.CTkToplevel):
         # Destello verde para despertar visual inmediato
         self._animar_destello_verde()
 
-        # Enfocar botón guardar para confirmar con Enter
-        self.btn_guardar.focus()
+        # Si el modo de auto-guardar con PRINT está activado, guardar directamente sin pedir clics
+        if getattr(self, "auto_guardar_print", False):
+            self.lbl_estado.configure(text="⚡ Guardando automáticamente por botón PRINT...", text_color="#34D399")
+            self.after(350, self._guardar)
+        else:
+            # Enfocar botón guardar para confirmar con Enter
+            self.btn_guardar.focus()
 
     def _animar_destello_verde(self):
         """Efecto visual de destello verde en el marco de monedas."""
@@ -421,7 +427,7 @@ class VentanaConteo(ctk.CTkToplevel):
         hoja_tipo   = "principal" if "PRINCIPAL" in self.combo_hoja.get().upper() else "pruebas"
         billetes    = self._leer_billetes()
 
-        self.btn_guardar.configure(state="disabled", text="Guardando...")
+        self.btn_guardar.configure(state="disabled", text="⏳ Guardando...")
         self.lbl_estado.configure(text=f"Guardando en {hoja_tipo.upper()}...", text_color="#9CA3AF")
 
         threading.Thread(
@@ -458,7 +464,12 @@ class VentanaConteo(ctk.CTkToplevel):
             self.after(0, self._error, str(e))
 
     def _exito(self):
-        self.lbl_estado.configure(text="✅ Guardado correctamente", text_color="#10B981")
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
+        self.lbl_estado.configure(text="✅ ¡Guardado con éxito!", text_color="#10B981")
         def _cerrar_y_notificar():
             self.destroy()
             if self.callback_cerrar:

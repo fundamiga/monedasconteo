@@ -34,15 +34,18 @@ def obtener_ruta_base():
 
 CREDS_FILE = os.path.join(obtener_ruta_base(), "config", "credentials.json")
 
+_CACHE_WS = {}
 
-def conectar_sheet(tipo_hoja="pruebas"):
-    """Conecta con Google Sheets usando cuenta de servicio (pruebas o principal)."""
+def conectar_sheet(tipo_hoja="pruebas", forzar=False):
+    """Conecta con Google Sheets usando cuenta de servicio (pruebas o principal). Cachea la sesión para respuesta ultra rápida."""
     from config.datos import SHEETS_CONFIG
     clave = "principal" if tipo_hoja.lower() == "principal" else "pruebas"
-    cfg = SHEETS_CONFIG[clave]
+    if not forzar and clave in _CACHE_WS:
+        return _CACHE_WS[clave]
 
     creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
     client = gspread.authorize(creds)
+    cfg = SHEETS_CONFIG[clave]
     sheet = client.open_by_key(cfg["id"])
     # Abrir la pestaña específica por GID
     try:
@@ -52,6 +55,7 @@ def conectar_sheet(tipo_hoja="pruebas"):
             worksheet = sheet.worksheet(cfg["sheet_name"])
         except Exception:
             worksheet = sheet.sheet1
+    _CACHE_WS[clave] = worksheet
     return worksheet
 
 
@@ -84,8 +88,14 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
     - Si el trabajador ya tiene una fila con su nombre: retorna esa fila.
     - Si no, retorna la primera fila vacía disponible dentro del parqueadero.
     Retorna el número de fila (base 1) o None si no hay espacio.
+    Optimizado: consulta solo la columna A (10x más rápido).
     """
-    todos = worksheet.get_all_values()
+    try:
+        columna_a = worksheet.col_values(1)
+    except Exception:
+        todos = worksheet.get_all_values()
+        columna_a = [f[0] if f else "" for f in todos]
+
     parqueadero_norm = normalizar(parqueadero)
     trabajador_norm = normalizar(trabajador)
 
@@ -103,14 +113,14 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
     en_parqueadero = False
     primera_vacia = None
 
-    for i, fila in enumerate(todos):
-        celda_a = normalizar(fila[0]) if fila else ""
-        texto_a = fila[0].strip() if fila else ""
+    for i, texto in enumerate(columna_a):
+        texto_a = str(texto).strip()
+        celda_a = normalizar(texto_a)
 
         # Detectar fila de fecha
-        if '/' in texto_a and texto_a[0].isdigit():
+        if '/' in texto_a and len(texto_a) > 0 and texto_a[0].isdigit():
             partes_c = texto_a.split('/')
-            if partes_c[0].strip() == dia_buscado and partes_c[2].strip() if len(partes_c) > 2 else False:
+            if partes_c[0].strip() == dia_buscado and (partes_c[2].strip() if len(partes_c) > 2 else False):
                 en_fecha = True
                 en_parqueadero = False
                 primera_vacia = None

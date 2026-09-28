@@ -22,6 +22,7 @@ a = Analysis(
         ('selector_trabajador.py', '.'),
         ('ventana_conteo.py',      '.'),
         ('vista_tabla.py',         '.'),
+        ('modo_camara.py',         '.'),
     ],
     hiddenimports=[
         'customtkinter',

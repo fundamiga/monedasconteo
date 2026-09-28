@@ -39,6 +39,7 @@ def cargar_ajustes():
         "auto_conectar": True,
         "modo_continuo": True,
         "modo_rapido": True,
+        "auto_guardar_print": False,
         "baud": "9600"
     }
     if os.path.exists(config_file):
@@ -72,6 +73,9 @@ class AppCC358(ctk.CTk):
         self.auto_conectar = self.ajustes.get("auto_conectar", True)
         self.modo_continuo = self.ajustes.get("modo_continuo", True)
         self.modo_rapido = self.ajustes.get("modo_rapido", True)
+        self.auto_guardar_print = self.ajustes.get("auto_guardar_print", False)
+        self.url_web_sync = self.ajustes.get("url_web_sync", "")
+        self.sync_web_activo = self.ajustes.get("sync_web_activo", True)  # Activo por defecto
 
         # Estado
         self.reader = None
@@ -85,9 +89,10 @@ class AppCC358(ctk.CTk):
         self._crear_ui()
         self._actualizar_puertos()
 
-        # Atajo global en toda la aplicación: Barra espaciadora y tecla F1
+        # Atajo global en toda la aplicación: Barra espaciadora, tecla F1 y Enter
         self.bind_all("<F1>", lambda e: self._adelantar_nuevo_turno())
         self.bind_all("<space>", self._on_space_pressed)
+        self.bind_all("<Return>", self._on_enter_pressed)
 
         # Si auto-conectar está habilitado por defecto, intentar conexión en breve
         if self.auto_conectar:
@@ -154,10 +159,12 @@ class AppCC358(ctk.CTk):
         self.btn_conectar.pack(side="left", padx=10)
 
         self.lbl_status = ctk.CTkLabel(
-            fila1, text="🔴 Desconectado",
-            text_color="#FF6B6B",
+            fila1, text="🔴 DESCONECTADO",
+            text_color="#F87171",
+            fg_color="#450A0A",
+            corner_radius=6,
             font=ctk.CTkFont(size=12, weight="bold"))
-        self.lbl_status.pack(side="left", padx=6)
+        self.lbl_status.pack(side="left", padx=6, ipady=3, ipadx=6)
 
         # Checkbox Auto-conectar COM al abrir (predeterminada activa)
         self.chk_autoconectar = ctk.CTkCheckBox(
@@ -229,6 +236,17 @@ class AppCC358(ctk.CTk):
             self.chk_continuo.select()
         self.chk_continuo.pack(side="left", padx=(6, 4))
 
+        # Checkbox Auto-guardar con botón PRINT (Opción manos libres)
+        self.chk_auto_print = ctk.CTkCheckBox(
+            fila2, text="⚡ Auto-guardar con PRINT", font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#34D399",
+            command=self._toggle_auto_print)
+        if self.auto_guardar_print:
+            self.chk_auto_print.select()
+        else:
+            self.chk_auto_print.deselect()
+        self.chk_auto_print.pack(side="left", padx=(6, 4))
+
         # Botón DISCRETO RECUPERAR ANTERIOR en PC
         self.btn_recuperar_pc = ctk.CTkButton(
             fila2, text="↩️ Recuperar", width=95, height=30,
@@ -252,6 +270,58 @@ class AppCC358(ctk.CTk):
             command=self._toggle_simulacion)
         self.btn_sim.pack(side="right", padx=4)
 
+        # ── FILA 3: SINCRONIZACIÓN WEB INALÁMBRICA (URL Vercel) ──
+        fila3 = ctk.CTkFrame(top, fg_color="#0F172A", corner_radius=8)
+        fila3.pack(fill="x", padx=10, pady=(0, 8))
+
+        ctk.CTkLabel(
+            fila3, text="📡 Sync Web (celular):",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#94A3B8"
+        ).pack(side="left", padx=(10, 4), pady=5)
+
+        self.entry_url_sync = ctk.CTkEntry(
+            fila3,
+            placeholder_text="https://tu-app.vercel.app  (pegar la URL y presionar Enter)",
+            width=420, height=28,
+            font=ctk.CTkFont(size=11)
+        )
+        if self.url_web_sync:
+            self.entry_url_sync.insert(0, self.url_web_sync)
+        self.entry_url_sync.pack(side="left", padx=4, pady=5)
+        self.entry_url_sync.bind("<Return>", lambda e: self._guardar_url_sync())
+        self.entry_url_sync.bind("<FocusOut>", lambda e: self._guardar_url_sync())
+
+        self.lbl_sync_estado = ctk.CTkLabel(
+            fila3, text="⬤ Sin URL",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#6B7280"
+        )
+        self.lbl_sync_estado.pack(side="left", padx=(8, 4))
+
+        ctk.CTkButton(
+            fila3, text="✓ Guardar URL", width=110, height=28,
+            fg_color="#1E3A5F", hover_color="#1E40AF",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            command=self._guardar_url_sync
+        ).pack(side="left", padx=4)
+
+        # Checkbox para activar/desactivar el sync (activo por defecto)
+        self.chk_sync_web = ctk.CTkCheckBox(
+            fila3, text="Enviar al celular automático",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#7DD3FC",
+            command=self._toggle_sync_web)
+        if self.sync_web_activo:
+            self.chk_sync_web.select()
+        else:
+            self.chk_sync_web.deselect()
+        self.chk_sync_web.pack(side="left", padx=(10, 4))
+
+        # Indicar estado inicial
+        self._actualizar_lbl_sync()
+
+
     def _abrir_modo_camara(self):
         """Abre la ventana de captura con cámara web y OCR."""
         self._log("Abriendo Modo Cámara con Visión Artificial...")
@@ -274,27 +344,31 @@ class AppCC358(ctk.CTk):
         left.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(left, text="📋 Registro de Turno",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(
-            anchor="w", padx=15, pady=(15, 8))
+                     font=ctk.CTkFont(size=17, weight="bold")).pack(
+            anchor="w", padx=15, pady=(14, 6))
 
-        # ── Trabajador y Parqueadero ──
+        # ── 1. Trabajador y Parqueadero ──
+        ctk.CTkLabel(left, text="👤 1. Quién entrega el turno",
+                     font=ctk.CTkFont(size=13, weight="bold"),
+                     text_color="#93C5FD").pack(anchor="w", padx=15, pady=(4, 2))
+
         seleccion = ctk.CTkFrame(left, fg_color="transparent")
-        seleccion.pack(fill="x", padx=15, pady=4)
+        seleccion.pack(fill="x", padx=15, pady=2)
         seleccion.grid_columnconfigure(1, weight=1)
 
-        ctk.CTkLabel(seleccion, text="Trabajador:").grid(row=0, column=0, sticky="w", pady=3)
+        ctk.CTkLabel(seleccion, text="Trabajador:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, sticky="w", pady=3)
         self.combo_trabajador = SelectorTrabajador(
             seleccion, width=280)
         self.combo_trabajador.set(TRABAJADORES[0])
         self.combo_trabajador.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=3)
 
-        ctk.CTkLabel(seleccion, text="Parqueadero:").grid(row=1, column=0, sticky="w", pady=3)
+        ctk.CTkLabel(seleccion, text="Parqueadero:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=1, column=0, sticky="w", pady=3)
         self.combo_parqueadero = ctk.CTkComboBox(
             seleccion, values=PARQUEADEROS, width=280)
         self.combo_parqueadero.set(PARQUEADEROS[0])
         self.combo_parqueadero.grid(row=1, column=1, sticky="ew", padx=(8, 0), pady=3)
 
-        ctk.CTkLabel(seleccion, text="Fecha Recaudo:").grid(row=2, column=0, sticky="w", pady=3)
+        ctk.CTkLabel(seleccion, text="Fecha Recaudo:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=2, column=0, sticky="w", pady=3)
         fecha_frame = ctk.CTkFrame(seleccion, fg_color="transparent")
         fecha_frame.grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=3)
 
@@ -313,10 +387,10 @@ class AppCC358(ctk.CTk):
             text_color="#10B981", font=ctk.CTkFont(weight="bold"))
         self.lbl_fecha.pack(side="left", padx=10)
 
-        # ── MONEDAS (automáticas desde CC358) ──
-        ctk.CTkLabel(left, text="🪙 MONEDAS  (desde CC358 — automático)",
+        # ── 2. MONEDAS (automáticas desde CC358) ──
+        ctk.CTkLabel(left, text="🪙 2. MONEDAS  (llegan solas al pulsar PRINT en la máquina)",
                      font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#60A5FA").pack(anchor="w", padx=15, pady=(12, 4))
+                     text_color="#60A5FA").pack(anchor="w", padx=15, pady=(10, 3))
 
         self.monedas_frame = ctk.CTkFrame(left, fg_color="#1F2937", corner_radius=8, border_width=2, border_color="#374151")
         self.monedas_frame.pack(fill="x", padx=15, pady=2)
@@ -343,10 +417,10 @@ class AppCC358(ctk.CTk):
             ctk.CTkLabel(fila, text="unidades", text_color="#9CA3AF").pack(side="left")
             self.campos_monedas[key] = entry
 
-        # ── BILLETES (manuales) ──
-        ctk.CTkLabel(left, text="💵 BILLETES  (digitar manualmente)",
+        # ── 3. BILLETES (manuales) ──
+        ctk.CTkLabel(left, text="💵 3. BILLETES  (escribir solo si entregó)",
                      font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color="#FBBF24").pack(anchor="w", padx=15, pady=(12, 4))
+                     text_color="#FBBF24").pack(anchor="w", padx=15, pady=(10, 3))
 
         billetes_frame = ctk.CTkFrame(left, fg_color="#1F2937", corner_radius=8)
         billetes_frame.pack(fill="x", padx=15, pady=2)
@@ -373,32 +447,32 @@ class AppCC358(ctk.CTk):
 
         # ── TOTALES ──
         totales = ctk.CTkFrame(left, fg_color="#111827", corner_radius=8)
-        totales.pack(fill="x", padx=15, pady=10)
+        totales.pack(fill="x", padx=15, pady=8)
 
-        def fila_total(parent, label, attr, color):
+        def fila_total(parent, label, attr, color, size=14):
             f = ctk.CTkFrame(parent, fg_color="transparent")
             f.pack(fill="x", padx=12, pady=2)
-            ctk.CTkLabel(f, text=label, text_color="#9CA3AF").pack(side="left")
+            ctk.CTkLabel(f, text=label, text_color="#9CA3AF", font=ctk.CTkFont(size=12)).pack(side="left")
             lbl = ctk.CTkLabel(f, text="$ 0", font=ctk.CTkFont(
-                size=14, weight="bold"), text_color=color)
+                size=size, weight="bold"), text_color=color)
             lbl.pack(side="right")
             return lbl
 
-        self.lbl_total_monedas  = fila_total(totales, "Total monedas:", "tm", "#60A5FA")
-        self.lbl_total_billetes = fila_total(totales, "Total billetes:", "tb", "#FBBF24")
-        self.lbl_total_turno    = fila_total(totales, "TOTAL TURNO:", "tt", "#10B981")
+        self.lbl_total_monedas  = fila_total(totales, "Total monedas:", "tm", "#60A5FA", size=14)
+        self.lbl_total_billetes = fila_total(totales, "Total billetes:", "tb", "#FBBF24", size=14)
+        self.lbl_total_turno    = fila_total(totales, "TOTAL TURNO:", "tt", "#10B981", size=18)
 
         # ── Botón Guardar ──
         self.btn_guardar = ctk.CTkButton(
-            left, text="💾  Guardar en Google Sheets",
+            left, text="💾  GUARDAR TURNO [Enter]",
             fg_color="#107C41", hover_color="#0B5C30",
-            font=ctk.CTkFont(size=14, weight="bold"),
-            height=44,
+            font=ctk.CTkFont(size=15, weight="bold"),
+            height=46,
             command=self._guardar_en_sheets)
-        self.btn_guardar.pack(fill="x", padx=15, pady=(4, 15))
+        self.btn_guardar.pack(fill="x", padx=15, pady=(4, 12))
 
-        self.lbl_resultado = ctk.CTkLabel(left, text="", text_color="#9CA3AF")
-        self.lbl_resultado.pack(pady=(0, 8))
+        self.lbl_resultado = ctk.CTkLabel(left, text="", font=ctk.CTkFont(size=12, weight="bold"), text_color="#9CA3AF")
+        self.lbl_resultado.pack(pady=(0, 6))
 
     def _crear_panel_consola(self):
         right = ctk.CTkFrame(self, corner_radius=10)
@@ -434,19 +508,28 @@ class AppCC358(ctk.CTk):
 
     def _actualizar_puertos(self):
         puertos = list(serial.tools.list_ports.comports())
+        # Filtrar puertos reales que NO sean Bluetooth
+        puertos_reales = [p for p in puertos if "bluetooth" not in (p.description or "").lower()]
+
         if puertos:
             vals = [f"{p.device} ({p.description})" for p in puertos]
             self.combo_puertos.configure(values=vals)
-            # Priorizar puerto serie USB si existe (CH340, USB Serial, etc.)
-            seleccion = vals[0]
-            for val in vals:
-                v_lower = val.lower()
-                if any(w in v_lower for w in ["ch340", "usb", "serial", "uart", "cp210", "ftdi", "prolific"]):
-                    seleccion = val
-                    break
-            self.combo_puertos.set(seleccion)
-            self._log(f"🔍 Puertos detectados en este PC: {', '.join([p.device for p in puertos])}")
-            self._log(f"📌 Seleccionado: {seleccion}")
+
+            if puertos_reales:
+                # Priorizar cable USB real
+                seleccion = f"{puertos_reales[0].device} ({puertos_reales[0].description})"
+                for p in puertos_reales:
+                    desc = (p.description or "").lower()
+                    if any(w in desc for w in ["ch340", "usb", "ftdi", "prolific", "cp210", "uart"]):
+                        seleccion = f"{p.device} ({p.description})"
+                        break
+                self.combo_puertos.set(seleccion)
+                self._log(f"🔍 Puertos detectados: {', '.join([p.device for p in puertos])}")
+                self._log(f"📌 Cable físico de máquina seleccionado: {seleccion}")
+            else:
+                self.combo_puertos.set(vals[0])
+                self._log(f"⚠️ ATENCIÓN: Los puertos detectados ({', '.join([p.device for p in puertos])}) son de BLUETOOTH del PC, NO del cable de la máquina.")
+                self._log("👉 El cable USB de la CC358 no aparece. Falta instalar el driver (CH340) o conectar el cable en otro puerto USB.")
         else:
             self.combo_puertos.configure(values=["Sin puertos COM"])
             self.combo_puertos.set("Sin puertos COM")
@@ -474,6 +557,12 @@ class AppCC358(ctk.CTk):
             self._log("ℹ️ Auto-conectar: No se detectó puerto COM activo. Conecta la máquina por USB.")
             return
 
+        # NUNCA auto-conectar a un puerto de Bluetooth porque no es la máquina
+        if "bluetooth" in val.lower():
+            self._log("⚠️ Auto-conexión evitada: El puerto actual es BLUETOOTH, no el cable USB de la máquina.")
+            self._log("👉 Conecta el cable USB de la CC358 o instala el driver del cable (CH340).")
+            return
+
         puerto = val.split()[0]
         baud_str = self.combo_baud.get()
         baud = int(baud_str) if baud_str.isdigit() else 9600
@@ -485,13 +574,13 @@ class AppCC358(ctk.CTk):
             self.btn_conectar.configure(
                 text="Desconectar", fg_color="#DC2626", hover_color="#991B1B")
             self.lbl_status.configure(
-                text=f"🟢 {puerto}", text_color="#10B981")
+                text=f"🟢 {puerto} LISTO", text_color="#34D399", fg_color="#064E3B")
             self._log(f"✅ Conexión automática exitosa en {puerto}. Listo para recibir conteos con PRINT.")
         else:
             self.reader = None
             self.btn_conectar.configure(
                 text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
-            self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+            self.lbl_status.configure(text="🔴 DESCONECTADO", text_color="#F87171", fg_color="#450A0A")
             self._log(f"⚠️ No se pudo auto-conectar en {puerto}. Puedes conectar manualmente.")
 
     def _toggle_conexion(self):
@@ -500,7 +589,7 @@ class AppCC358(ctk.CTk):
             self.reader = None
             self.btn_conectar.configure(
                 text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
-            self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+            self.lbl_status.configure(text="🔴 DESCONECTADO", text_color="#F87171", fg_color="#450A0A")
             self._log("Puerto COM desconectado.")
         else:
             val = self.combo_puertos.get()
@@ -516,13 +605,13 @@ class AppCC358(ctk.CTk):
                 self.btn_conectar.configure(
                     text="Desconectar", fg_color="#DC2626", hover_color="#991B1B")
                 self.lbl_status.configure(
-                    text=f"🟢 {puerto}", text_color="#10B981")
+                    text=f"🟢 {puerto} LISTO", text_color="#34D399", fg_color="#064E3B")
                 self._log(f"Conectado exitosamente a {puerto} a {baud} baudios.")
             else:
                 self.reader = None
                 self.btn_conectar.configure(
                     text="⚡ Conectar COM", fg_color="#2FA572", hover_color="#1E7B54")
-                self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+                self.lbl_status.configure(text="🔴 DESCONECTADO", text_color="#F87171", fg_color="#450A0A")
                 self._log(f"❌ Error al conectar a {puerto}.")
 
     def _toggle_simulacion(self):
@@ -530,12 +619,12 @@ class AppCC358(ctk.CTk):
             self.reader.desconectar()
             self.reader = None
             self.btn_sim.configure(text="▶ Simulación", fg_color="#6B7280")
-            self.lbl_status.configure(text="🔴 Desconectado", text_color="#FF6B6B")
+            self.lbl_status.configure(text="🔴 DESCONECTADO", text_color="#F87171", fg_color="#450A0A")
         else:
             self.reader = CC358Reader(self._on_datos_recibidos, self._log_thread)
             self.reader.conectar(None, simulacion=True)
             self.btn_sim.configure(text="⏹ Detener Sim.", fg_color="#D97706")
-            self.lbl_status.configure(text="🟡 Simulación activa", text_color="#FBBF24")
+            self.lbl_status.configure(text="🟡 SIMULACIÓN", text_color="#FBBF24", fg_color="#451A03")
 
     def _toggle_modo_rapido(self):
         self.modo_rapido = not self.modo_rapido
@@ -558,6 +647,67 @@ class AppCC358(ctk.CTk):
             self._log("⚡ Modo Continuo ACTIVO: Al guardar se abrirá automáticamente el siguiente turno en 0.")
         else:
             self._log("Modo Continuo desactivado: La ventana se cerrará tras guardar.")
+
+    def _toggle_auto_print(self):
+        self.auto_guardar_print = bool(self.chk_auto_print.get())
+        self.ajustes["auto_guardar_print"] = self.auto_guardar_print
+        guardar_ajustes(self.ajustes)
+        if self.auto_guardar_print:
+            self._log("⚡ Auto-guardar con PRINT ACTIVADO: Al presionar PRINT en la CC358 se guardará automáticamente en Google Sheets.")
+        else:
+            self._log("ℹ️ Auto-guardar con PRINT DESACTIVADO: Requiere confirmación manual para guardar.")
+
+    def _guardar_url_sync(self):
+        """Guarda la URL de sincronización web y actualiza el indicador."""
+        url = self.entry_url_sync.get().strip().rstrip("/")
+        self.url_web_sync = url
+        self.ajustes["url_web_sync"] = url
+        guardar_ajustes(self.ajustes)
+        self._actualizar_lbl_sync()
+        if url:
+            self._log(f"📡 URL de sincronización guardada: {url}")
+
+    def _actualizar_lbl_sync(self):
+        """Actualiza el indicador de color del estado de sincronización."""
+        if not hasattr(self, "lbl_sync_estado"):
+            return
+        if not self.url_web_sync:
+            self.lbl_sync_estado.configure(text="⬤ Sin URL", text_color="#6B7280")
+        elif self.sync_web_activo:
+            self.lbl_sync_estado.configure(text="⬤ Activo", text_color="#34D399")
+        else:
+            self.lbl_sync_estado.configure(text="⬤ Pausado", text_color="#F59E0B")
+
+    def _toggle_sync_web(self):
+        """Activa o desactiva el envío automático al celular."""
+        self.sync_web_activo = bool(self.chk_sync_web.get())
+        self.ajustes["sync_web_activo"] = self.sync_web_activo
+        guardar_ajustes(self.ajustes)
+        self._actualizar_lbl_sync()
+        if self.sync_web_activo:
+            self._log("📡 Sync al celular ACTIVADO: cada PRINT se enviará al celular automáticamente.")
+        else:
+            self._log("⏸️ Sync al celular PAUSADO: los conteos no se enviarán al celular hasta reactivarlo.")
+
+    def _enviar_sync_web(self, monedas, total):
+        """Envía el conteo al servidor web (Vercel) para que el celular lo reciba. Corre en hilo secundario."""
+        import urllib.request
+        url = (self.url_web_sync or "").strip().rstrip("/")
+        if not url:
+            return
+        endpoint = url + "/api/cc358-sync"
+        payload = json.dumps({"monedas": monedas, "total": total}).encode("utf-8")
+        req = urllib.request.Request(
+            endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                self.after(0, lambda: self._log(f"📡 Conteo enviado al celular: $ {total:,.0f} → {resp.status} OK"))
+        except Exception as e:
+            self.after(0, lambda err=e: self._log(f"⚠️ No se pudo enviar al celular: {err}"))
 
     def _recuperar_anterior_pc(self):
         """Recupera los datos del último turno guardado o limpiado."""
@@ -613,6 +763,20 @@ class AppCC358(ctk.CTk):
         """Llamado cuando la CC358 (o simulación) envía un conteo."""
         self.monedas_actuales = monedas
 
+        # ── SINCRONIZACIÓN WEB INALÁMBRICA ──
+        # Calcula el total de monedas y lo envía al servidor web en hilo aparte
+        if self.url_web_sync and self.sync_web_activo:
+            denominaciones = {
+                "1000": 1000, "200a": 200, "500": 500, "100a": 100,
+                "200b": 200, "50a": 50, "100b": 100, "50b": 50
+            }
+            total_mon = sum(monedas.get(k, 0) * v for k, v in denominaciones.items())
+            threading.Thread(
+                target=self._enviar_sync_web,
+                args=(monedas, total_mon),
+                daemon=True
+            ).start()
+
         # Sincronizar con la ventana de Modo Tabla si está abierta
         if self.ventana_tabla and self.ventana_tabla.winfo_exists():
             self.after(0, self.ventana_tabla.recibir_conteo_monedas, monedas)
@@ -628,6 +792,9 @@ class AppCC358(ctk.CTk):
             self.after(0, self._abrir_ventana_rapida, monedas)
         else:
             self.after(0, self._mostrar_monedas, monedas)
+            if self.auto_guardar_print:
+                self._log("⚡ Auto-guardando turno con datos recibidos de PRINT...")
+                self.after(350, self._guardar_en_sheets)
 
 
     def _abrir_ventana_rapida(self, monedas):
@@ -643,7 +810,7 @@ class AppCC358(ctk.CTk):
                 # Reabrir automáticamente en 0 el siguiente turno
                 self.after(250, lambda: self._abrir_ventana_rapida(monedas={}))
 
-        v = VentanaConteo(self, monedas, callback_cerrar=al_cerrar)
+        v = VentanaConteo(self, monedas, callback_cerrar=al_cerrar, auto_guardar_print=self.auto_guardar_print)
         self.ventana_rapida_instancia = v
         v.protocol("WM_DELETE_WINDOW", lambda: (
             setattr(self, '_ventana_abierta', False),
@@ -783,6 +950,11 @@ class AppCC358(ctk.CTk):
         else:
             self._log("📁 Modo Hoja de Pruebas activado.")
 
+    def _on_enter_pressed(self, event=None):
+        if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
+            return
+        self._guardar_en_sheets()
+
     def _guardar_en_sheets(self):
         trabajador  = self.combo_trabajador.get()
         parqueadero = self.combo_parqueadero.get()
@@ -793,6 +965,7 @@ class AppCC358(ctk.CTk):
         billetes    = self._leer_billetes()
 
         self.btn_guardar_top.configure(state="disabled", text="⏳ Guardando...")
+        self.btn_guardar.configure(state="disabled", text="⏳ Guardando...")
         self.lbl_resultado.configure(text=f"Guardando en {hoja_tipo.upper()}...", text_color="#9CA3AF")
 
         threading.Thread(
@@ -842,12 +1015,19 @@ class AppCC358(ctk.CTk):
 
 
     def _resultado_ok(self, msg):
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_ICONASTERISK)
+        except Exception:
+            pass
         self.lbl_resultado.configure(text=msg, text_color="#10B981")
-        self.btn_guardar_top.configure(state="normal", text="💾 GUARDAR EN SHEETS")
+        self.btn_guardar_top.configure(state="normal", text="💾 GUARDAR")
+        self.btn_guardar.configure(state="normal", text="💾  GUARDAR TURNO [Enter]")
 
     def _resultado_error(self, msg):
         self.lbl_resultado.configure(text=msg, text_color="#EF4444")
-        self.btn_guardar_top.configure(state="normal", text="💾 GUARDAR EN SHEETS")
+        self.btn_guardar_top.configure(state="normal", text="💾 GUARDAR")
+        self.btn_guardar.configure(state="normal", text="💾  GUARDAR TURNO [Enter]")
 
     # ─────────────────────────────────────────
     # CONSOLA
