@@ -82,19 +82,44 @@ def normalizar(texto):
     return str(texto).upper().strip()
 
 
+def _fila_tiene_conteo(r):
+    """
+    Retorna True si la fila ya tiene un conteo registrado (dinero > 0 o casillas con cantidades).
+    Evita sobreescribir turnos previos del mismo trabajador.
+    """
+    if not r:
+        return False
+    # 1. Total turno (columna S, índice 18 base 0)
+    if len(r) > 18:
+        val_tot = re.sub(r'[^\d]', '', str(r[18]))
+        if val_tot and int(val_tot) > 0:
+            return True
+
+    # 2. Casillas de monedas (C-J, índices 2-9) o billetes (L-Q, índices 11-16)
+    indices = [2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16]
+    for col_idx in indices:
+        if len(r) > col_idx:
+            val = str(r[col_idx]).strip()
+            if val and val != "0":
+                val_num = re.sub(r'[^\d]', '', val)
+                if val_num and int(val_num) > 0:
+                    return True
+    return False
+
+
 def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
     """
     Busca la fila del trabajador dado una fecha y parqueadero.
-    - Si el trabajador ya tiene una fila con su nombre: retorna esa fila.
-    - Si no, retorna la primera fila vacía disponible dentro del parqueadero.
+    - Si el trabajador tiene una fila con su nombre que AÚN NO tiene conteo: retorna esa fila.
+    - Si el trabajador ya tiene un conteo previo (o no está en la lista): busca la primera
+      fila vacía disponible dentro del parqueadero para NO sobreescribir el conteo anterior.
     Retorna el número de fila (base 1) o None si no hay espacio.
-    Optimizado: consulta solo la columna A (10x más rápido).
     """
     try:
-        columna_a = worksheet.col_values(1)
-    except Exception:
         todos = worksheet.get_all_values()
-        columna_a = [f[0] if f else "" for f in todos]
+    except Exception:
+        columna_a = worksheet.col_values(1)
+        todos = [[f] for f in columna_a]
 
     parqueadero_norm = normalizar(parqueadero)
     trabajador_norm = normalizar(trabajador)
@@ -113,8 +138,8 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
     en_parqueadero = False
     primera_vacia = None
 
-    for i, texto in enumerate(columna_a):
-        texto_a = str(texto).strip()
+    for i, r in enumerate(todos):
+        texto_a = str(r[0]).strip() if r and len(r) > 0 else ""
         celda_a = normalizar(texto_a)
 
         # Detectar fila de fecha
@@ -128,6 +153,11 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
             elif en_fecha:
                 # Nueva fecha → salir
                 break
+        elif not en_fecha and texto_a == dia_buscado and (i == 0 or not (todos[i-1] and str(todos[i-1][0]).strip())):
+            en_fecha = True
+            en_parqueadero = False
+            primera_vacia = None
+            continue
 
         if not en_fecha:
             continue
@@ -149,18 +179,23 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
             if "TOTAL" in celda_a:
                 break
 
-            # Fila vacía disponible
+            tiene_conteo = _fila_tiene_conteo(r)
+
+            if tiene_conteo:
+                # Esta fila YA tiene un turno guardado. Nunca sobreescribirla,
+                # aunque tenga el nombre del trabajador.
+                continue
+
+            # La fila NO tiene conteo:
+            # 1. Si coincide el nombre del trabajador (ej. fila pre-escrita sin llenar):
+            if celda_a and (trabajador_norm in celda_a or celda_a in trabajador_norm):
+                return i + 1
+
+            # 2. Si la fila está totalmente vacía de nombre:
             if not celda_a and primera_vacia is None:
-                primera_vacia = i + 1  # guardar por si no encontramos al trabajador
+                primera_vacia = i + 1
 
-            # Fila con el trabajador
-            if celda_a and (
-                trabajador_norm in celda_a or
-                celda_a in trabajador_norm
-            ):
-                return i + 1  # fila exacta del trabajador
-
-    # Si no encontramos al trabajador, usamos la primera fila vacía
+    # Si no encontramos una fila vacía con su nombre, usamos la primera fila vacía disponible
     return primera_vacia
 
 
