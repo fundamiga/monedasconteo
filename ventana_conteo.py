@@ -19,11 +19,37 @@ def fmt_cop(valor):
     return f"$ {valor:,.0f}".replace(",", ".")
 
 
+def obtener_monitores():
+    """Retorna lista de monitores conectados en Windows con sus coordenadas."""
+    monitors = []
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+
+        def callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+            r = lprcMonitor.contents
+            monitors.append({
+                'left': r.left, 'top': r.top,
+                'right': r.right, 'bottom': r.bottom,
+                'width': r.right - r.left, 'height': r.bottom - r.top
+            })
+            return True
+
+        MONITORENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+        user32.EnumDisplayMonitors(None, None, MONITORENUMPROC(callback), 0)
+    except Exception:
+        pass
+    if not monitors:
+        monitors = [{'left': 0, 'top': 0, 'right': 1920, 'bottom': 1080, 'width': 1920, 'height': 1080}]
+    return monitors
+
+
 class VentanaConteo(ctk.CTkToplevel):
     """
     Ventana emergente que aparece cuando la CC358 termina un conteo.
     Muestra monedas, permite ingresar billetes, trabajador y parqueadero.
-    Se cierra sola al guardar.
+    Se cierra sola al guardar. Soporta selección de monitor en pantallas múltiples.
     """
 
     def __init__(self, parent, monedas=None, callback_cerrar=None, auto_guardar_print=None):
@@ -34,9 +60,28 @@ class VentanaConteo(ctk.CTkToplevel):
         self.labels_cant_monedas = {}
         self.labels_subtotal_monedas = {}
         self.filas_monedas = {}
+        self.monitores = obtener_monitores()
+        self.ancho = 680
+
+        # Determinar monitor objetivo
+        ajustes = getattr(parent, 'ajustes', {})
+        idx_guardado = ajustes.get('monitor_popup', None)
+        if idx_guardado is not None and 0 <= idx_guardado < len(self.monitores):
+            self.monitor_actual = idx_guardado
+        elif len(self.monitores) > 1:
+            try:
+                parent_x = parent.winfo_rootx()
+                self.monitor_actual = 0
+                for idx, m in enumerate(self.monitores):
+                    if m['left'] <= parent_x < m['right']:
+                        self.monitor_actual = idx
+                        break
+            except Exception:
+                self.monitor_actual = 0
+        else:
+            self.monitor_actual = 0
 
         self.title("Nuevo Conteo CC358")
-        ancho = 680
         self.resizable(True, True)
         self.attributes("-topmost", True)  # Siempre encima
         self.minsize(640, 500)
@@ -44,15 +89,35 @@ class VentanaConteo(ctk.CTkToplevel):
         # Construir UI primero para medir el tamaño real
         self._crear_ui()
 
-        # Ajustar posición: centrar X, Y=20 garantiza que siempre quede en pantalla
+        # Ajustar posición en el monitor seleccionado
         self.update_idletasks()
         alto_real = self.winfo_reqheight()
-        x = max(0, (self.winfo_screenwidth() // 2) - (ancho // 2))
-        y = 20
-        self.geometry(f"{ancho}x{alto_real}+{x}+{y}")
+        mon = self.monitores[self.monitor_actual]
+        x = mon['left'] + max(10, (mon['width'] - self.ancho) // 2)
+        y = mon['top'] + 20
+        self.geometry(f"{self.ancho}x{alto_real}+{x}+{y}")
 
         # Enfocar primer campo de billetes o trabajador
         self.after(200, self._enfocar_primer_campo)
+
+    def _cambiar_monitor(self):
+        if len(self.monitores) < 2:
+            return
+        self.monitor_actual = (self.monitor_actual + 1) % len(self.monitores)
+        mon = self.monitores[self.monitor_actual]
+        alto_real = self.winfo_height() or 560
+        x = mon['left'] + max(10, (mon['width'] - self.ancho) // 2)
+        y = mon['top'] + 20
+        self.geometry(f"{self.ancho}x{alto_real}+{x}+{y}")
+        if hasattr(self, "btn_monitor"):
+            self.btn_monitor.configure(text=f"🖥️ Pantalla {self.monitor_actual + 1}")
+        if hasattr(self.master, "ajustes"):
+            self.master.ajustes["monitor_popup"] = self.monitor_actual
+            try:
+                from app_gui import guardar_ajustes
+                guardar_ajustes(self.master.ajustes)
+            except Exception:
+                pass
 
     def _enfocar_primer_campo(self):
         try:
@@ -67,13 +132,27 @@ class VentanaConteo(ctk.CTkToplevel):
 
         tiene_monedas = any(v > 0 for v in self.monedas.values())
 
-        # ── Título ──
+        # ── Título y botón de cambio de monitor ──
+        f_top = ctk.CTkFrame(self, fg_color="transparent")
+        f_top.grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 4), sticky="ew")
+
         self.lbl_titulo = ctk.CTkLabel(
-            self, 
+            f_top, 
             text="✅ ¡Monedas Recibidas de la Máquina!" if tiene_monedas else "⚡ Adelantar Conteo (Escribe datos mientras cuenta)",
             font=ctk.CTkFont(size=15, weight="bold"),
             text_color="#34D399" if tiene_monedas else "#FBBF24")
-        self.lbl_titulo.grid(row=0, column=0, columnspan=2, pady=(8, 4))
+        self.lbl_titulo.pack(side="left", padx=4)
+
+        if len(self.monitores) > 1:
+            self.btn_monitor = ctk.CTkButton(
+                f_top,
+                text=f"🖥️ Pantalla {self.monitor_actual + 1}",
+                fg_color="#1E3A8A", hover_color="#1D4ED8",
+                font=ctk.CTkFont(size=11, weight="bold"),
+                width=115, height=26,
+                command=self._cambiar_monitor
+            )
+            self.btn_monitor.pack(side="right", padx=4)
 
         # ── Panel MONEDAS (izquierda) ──
         self.frame_mon = ctk.CTkFrame(

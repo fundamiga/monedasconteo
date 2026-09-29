@@ -41,6 +41,7 @@ def cargar_ajustes():
         "modo_continuo": True,
         "modo_rapido": True,
         "auto_guardar_print": False,
+        "monitor_popup": None,
         "baud": "9600"
     }
     if os.path.exists(config_file):
@@ -266,6 +267,22 @@ class AppCC358(ctk.CTk):
             command=self._on_cambio_hoja)
         self.combo_hoja.set("⚠️ PRINCIPAL")
         self.combo_hoja.pack(side="left", padx=2)
+
+        # Selector de monitor si hay múltiples pantallas
+        from ventana_conteo import obtener_monitores
+        self.monitores_sistema = obtener_monitores()
+        if len(self.monitores_sistema) > 1:
+            ctk.CTkLabel(fila2, text="Pantalla:", font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(10, 4))
+            opciones_mon = [f"Pantalla {i+1} ({m['width']}x{m['height']})" for i, m in enumerate(self.monitores_sistema)]
+            mon_guardado = self.ajustes.get("monitor_popup", 0)
+            if mon_guardado is None or mon_guardado >= len(opciones_mon):
+                mon_guardado = 0
+            self.combo_monitor_pop = ctk.CTkComboBox(
+                fila2, values=opciones_mon, width=175, height=30,
+                command=self._on_cambio_monitor_popup
+            )
+            self.combo_monitor_pop.set(opciones_mon[mon_guardado])
+            self.combo_monitor_pop.pack(side="left", padx=2)
 
         # Botón Simulación
         self.btn_sim = ctk.CTkButton(
@@ -953,6 +970,15 @@ class AppCC358(ctk.CTk):
             self._log("⚠️ ATENCIÓN: Modo Hoja PRINCIPAL (Producción) activado.")
         else:
             self._log("📁 Modo Hoja de Pruebas activado.")
+
+    def _on_cambio_monitor_popup(self, seleccion):
+        import re
+        m = re.search(r'\d+', seleccion)
+        if m:
+            idx = int(m.group(0)) - 1
+            self.ajustes["monitor_popup"] = idx
+            guardar_ajustes(self.ajustes)
+            self._log(f"🖥️ Ventana rápida configurada para abrirse en Pantalla {idx + 1}.")
 
     def _on_enter_pressed(self, event=None):
         if self._ventana_abierta and self.ventana_rapida_instancia and self.ventana_rapida_instancia.winfo_exists():
