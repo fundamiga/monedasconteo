@@ -23,6 +23,7 @@ a = Analysis(
         ('ventana_conteo.py',      '.'),
         ('vista_tabla.py',         '.'),
         ('modo_camara.py',         '.'),
+        ('actualizador.py',        '.'),
     ],
     hiddenimports=[
         'customtkinter',
@@ -41,6 +42,10 @@ a = Analysis(
         'tkinter',
         'tkinter.messagebox',
         'tkinter.ttk',
+        'packaging',
+        'packaging.version',
+        'urllib.request',
+        'urllib.error',
     ],
     hookspath=[],
     hooksconfig={},

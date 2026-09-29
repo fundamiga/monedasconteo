@@ -24,6 +24,7 @@ from sheets.google_sheets import (
 from ventana_conteo import VentanaConteo
 from vista_tabla import VentanaTablaExcel
 from modo_camara import VentanaCamaraOCR
+from actualizador import verificar_actualizacion
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -97,6 +98,9 @@ class AppCC358(ctk.CTk):
         # Si auto-conectar está habilitado por defecto, intentar conexión en breve
         if self.auto_conectar:
             self.after(600, self._intentar_autoconexion)
+
+        # Verificar si hay una versión nueva en GitHub (silencioso, en segundo plano)
+        self.after(3000, lambda: verificar_actualizacion(self))
 
     def _on_space_pressed(self, event):
         # Si ya hay una ventana rápida abierta, no hacer nada para permitir espacios en sus campos

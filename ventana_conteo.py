@@ -90,7 +90,16 @@ class VentanaConteo(ctk.CTkToplevel):
         ctk.CTkLabel(f_header_mon, text="MONEDAS (automático)",
                      font=ctk.CTkFont(size=12, weight="bold"),
                      text_color="#34D399" if tiene_monedas else "#60A5FA").pack(side="left")
-        
+
+        # Botón DISCRETO RECUPERAR ANTERIOR — esquina superior del panel de monedas
+        self.btn_recuperar = ctk.CTkButton(
+            f_header_mon, text="↩️ Recuperar",
+            fg_color="#78350F", hover_color="#92400E", text_color="#FDE68A",
+            font=ctk.CTkFont(size=10),
+            width=90, height=22,
+            command=self._recuperar_anterior)
+        self.btn_recuperar.pack(side="left", padx=8)
+
         self.lbl_espera_print = ctk.CTkLabel(
             f_header_mon, 
             text="🟢 ¡CONTEO RECIBIDO!" if tiene_monedas else "🟡 Esperando PRINT...",
@@ -286,15 +295,6 @@ class VentanaConteo(ctk.CTkToplevel):
         ctk.CTkButton(frame_btns, text="Cancelar",
                       fg_color="#374151", hover_color="#4B5563",
                       width=90, height=36, command=self.destroy).pack(side="left", padx=4)
-
-        # Botón DISCRETO RECUPERAR ANTERIOR dentro de la ventana de conteo
-        self.btn_recuperar = ctk.CTkButton(
-            frame_btns, text="↩️ Recuperar Anterior",
-            fg_color="#78350F", hover_color="#92400E", text_color="#FDE68A",
-            font=ctk.CTkFont(size=11, weight="bold"),
-            width=135, height=36,
-            command=self._recuperar_anterior)
-        self.btn_recuperar.pack(side="left", padx=4)
 
         self.lbl_estado = ctk.CTkLabel(frame_btns, text="",
                                         text_color="#9CA3AF")
