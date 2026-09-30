@@ -116,6 +116,9 @@ class VentanaConteo(ctk.CTkToplevel):
             try:
                 from app_gui import guardar_ajustes
                 guardar_ajustes(self.master.ajustes)
+            except Exception:
+                pass
+
     def _abrir_historial(self):
         try:
             from ventana_historial import VentanaHistorial
