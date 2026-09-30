@@ -137,6 +137,8 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
     en_fecha = False
     en_parqueadero = False
     primera_vacia = None
+    fila_inicio_parqueadero = None
+    fila_total = None
 
     for i, r in enumerate(todos):
         texto_a = str(r[0]).strip() if r and len(r) > 0 else ""
@@ -149,6 +151,8 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
                 en_fecha = True
                 en_parqueadero = False
                 primera_vacia = None
+                fila_inicio_parqueadero = None
+                fila_total = None
                 continue
             elif en_fecha:
                 # Nueva fecha → salir
@@ -157,6 +161,8 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
             en_fecha = True
             en_parqueadero = False
             primera_vacia = None
+            fila_inicio_parqueadero = None
+            fila_total = None
             continue
 
         if not en_fecha:
@@ -167,6 +173,8 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
             if celda_a == parqueadero_norm:
                 en_parqueadero = True
                 primera_vacia = None
+                fila_inicio_parqueadero = i + 2  # Primera fila de trabajadores en este parqueadero
+                fila_total = None
             else:
                 # Llegamos a otro parqueadero, salir si estábamos en el correcto
                 if en_parqueadero:
@@ -177,6 +185,7 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
         if en_parqueadero:
             # TOTAL TURNO marca el fin de la sección
             if "TOTAL" in celda_a:
+                fila_total = i + 1
                 break
 
             tiene_conteo = _fila_tiene_conteo(r)
@@ -195,8 +204,43 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
             if not celda_a and primera_vacia is None:
                 primera_vacia = i + 1
 
-    # Si no encontramos una fila vacía con su nombre, usamos la primera fila vacía disponible
-    return primera_vacia
+    # Si encontramos una fila vacía disponible, usarla
+    if primera_vacia is not None:
+        return primera_vacia
+
+    # Si NO encontramos fila vacía pero estábamos en el parqueadero y tenemos la fila de TOTAL TURNO:
+    # Crear e insertar una fila nueva automáticamente sin dañar fórmulas ni totales del Excel
+    if en_parqueadero and fila_total is not None and fila_inicio_parqueadero is not None:
+        nueva_fila = fila_total
+
+        # Fórmulas idénticas a las filas existentes:
+        # Columna K: Total monedas
+        f_k = f'=C{nueva_fila}*$C$3+D{nueva_fila}*$D$3+E{nueva_fila}*$E$3+F{nueva_fila}*$F$3+G{nueva_fila}*$G$3+H{nueva_fila}*$H$3+I{nueva_fila}*$I$3+J{nueva_fila}*$J$3'
+        # Columna R: Total billetes
+        f_r = f'=L{nueva_fila}*$L$3+M{nueva_fila}*$M$3+N{nueva_fila}*$N$3+O{nueva_fila}*$O$3+P{nueva_fila}*$P$3+Q{nueva_fila}*$Q$3'
+        # Columna S: Total turno (K + R)
+        f_s = f'=K{nueva_fila}+R{nueva_fila}'
+
+        vals = [''] * 19
+        vals[0] = trabajador
+        vals[10] = f_k
+        vals[17] = f_r
+        vals[18] = f_s
+
+        worksheet.insert_row(vals, index=nueva_fila, value_input_option='USER_ENTERED', inherit_from_before=True)
+
+        # La fila de TOTAL TURNO se desplazó una posición hacia abajo
+        fila_total_nueva = nueva_fila + 1
+        tot_updates = [
+            {'range': f'K{fila_total_nueva}', 'values': [[f'=SUM(K{fila_inicio_parqueadero}:K{nueva_fila})']]},
+            {'range': f'R{fila_total_nueva}', 'values': [[f'=SUM(R{fila_inicio_parqueadero}:R{nueva_fila})']]},
+            {'range': f'S{fila_total_nueva}', 'values': [[f'=SUM(S{fila_inicio_parqueadero}:S{nueva_fila})']]},
+        ]
+        worksheet.batch_update(tot_updates)
+
+        return nueva_fila
+
+    return None
 
 
 def escribir_nombre_trabajador(worksheet, fila, nombre):
