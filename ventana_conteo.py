@@ -116,8 +116,14 @@ class VentanaConteo(ctk.CTkToplevel):
             try:
                 from app_gui import guardar_ajustes
                 guardar_ajustes(self.master.ajustes)
-            except Exception:
-                pass
+    def _abrir_historial(self):
+        try:
+            from ventana_historial import VentanaHistorial
+            v = VentanaHistorial(self)
+            v.lift()
+            v.focus()
+        except Exception as e:
+            print(f"Error abriendo ventana de historial: {e}")
 
     def _enfocar_primer_campo(self):
         try:
@@ -149,10 +155,21 @@ class VentanaConteo(ctk.CTkToplevel):
                 text=f"🖥️ Pantalla {self.monitor_actual + 1}",
                 fg_color="#1E3A8A", hover_color="#1D4ED8",
                 font=ctk.CTkFont(size=11, weight="bold"),
-                width=115, height=26,
+                width=110, height=26,
                 command=self._cambiar_monitor
             )
             self.btn_monitor.pack(side="right", padx=4)
+
+        # Botón discreto HISTORIAL en la ventana rápida
+        self.btn_historial_rapido = ctk.CTkButton(
+            f_top,
+            text="📜 Historial",
+            fg_color="#4C1D95", hover_color="#5B21B6", text_color="#DDD6FE",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            width=90, height=26,
+            command=self._abrir_historial
+        )
+        self.btn_historial_rapido.pack(side="right", padx=4)
 
         # ── Panel MONEDAS (izquierda) ──
         self.frame_mon = ctk.CTkFrame(
