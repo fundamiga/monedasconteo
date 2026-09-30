@@ -396,7 +396,6 @@ class AppCC358(ctk.CTk):
         ctk.CTkLabel(seleccion, text="Trabajador:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, sticky="w", pady=3)
         self.combo_trabajador = SelectorTrabajador(
             seleccion, width=280)
-        self.combo_trabajador.set(TRABAJADORES[0])
         self.combo_trabajador.grid(row=0, column=1, sticky="ew", padx=(8, 0), pady=3)
 
         ctk.CTkLabel(seleccion, text="Parqueadero:", font=ctk.CTkFont(size=12, weight="bold")).grid(row=1, column=0, sticky="w", pady=3)
@@ -938,6 +937,10 @@ class AppCC358(ctk.CTk):
         for entry in self.campos_billetes.values():
             entry.delete(0, "end")
 
+        # Limpiar trabajador seleccionado
+        if hasattr(self, 'combo_trabajador'):
+            self.combo_trabajador.set("")
+
         # Resetear totales
         self.lbl_total_monedas.configure(text="$ 0")
         self.lbl_total_billetes.configure(text="$ 0")
@@ -1002,7 +1005,32 @@ class AppCC358(ctk.CTk):
         self._guardar_en_sheets()
 
     def _guardar_en_sheets(self):
-        trabajador  = self.combo_trabajador.get()
+        trabajador  = self.combo_trabajador.get().strip()
+
+        # Validación obligatoria de trabajador
+        if not trabajador or trabajador == "?" or trabajador.startswith("--"):
+            self.lbl_resultado.configure(
+                text="⚠️ ¡FALTA TRABAJADOR! Escribe o selecciona el nombre antes de guardar.",
+                text_color="#F87171"
+            )
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            except Exception:
+                pass
+            try:
+                self.combo_trabajador.entry.focus()
+                self.combo_trabajador.entry.configure(border_color="#EF4444")
+                def _restaurar_borde():
+                    try:
+                        self.combo_trabajador.entry.configure(border_color="#374151")
+                    except Exception:
+                        pass
+                self.after(2500, _restaurar_borde)
+            except Exception:
+                pass
+            return
+
         parqueadero = self.combo_parqueadero.get()
         dia_sel     = self._obtener_dia_seleccionado()
         fecha       = obtener_fecha_hoy(dia_sel)

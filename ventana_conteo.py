@@ -332,7 +332,6 @@ class VentanaConteo(ctk.CTkToplevel):
             row=0, column=0, padx=(10, 4), pady=5, sticky="w")
         self.combo_trabajador = SelectorTrabajador(
             frame_datos, width=240)
-        self.combo_trabajador.set(TRABAJADORES[0])
         self.combo_trabajador.grid(row=0, column=1, padx=4, pady=5, sticky="ew")
 
         # Parqueadero
@@ -476,8 +475,11 @@ class VentanaConteo(ctk.CTkToplevel):
             self.lbl_estado.configure(text="⚡ Guardando automáticamente por botón PRINT...", text_color="#34D399")
             self.after(350, self._guardar)
         else:
-            # Enfocar botón guardar para confirmar con Enter
-            self.btn_guardar.focus()
+            # Si falta el trabajador, enfocar el campo de trabajador; sino el botón guardar
+            if not self.combo_trabajador.get().strip():
+                self.combo_trabajador.entry.focus()
+            else:
+                self.btn_guardar.focus()
 
     def _animar_destello_verde(self):
         """Efecto visual de destello verde en el marco de monedas."""
@@ -520,7 +522,33 @@ class VentanaConteo(ctk.CTkToplevel):
         return obtener_fecha_hoy(dia_num)
 
     def _guardar(self):
-        trabajador  = self.combo_trabajador.get()
+        trabajador  = self.combo_trabajador.get().strip()
+
+        # Validación obligatoria de trabajador
+        if not trabajador or trabajador == "?" or trabajador.startswith("--"):
+            self.btn_guardar.configure(state="normal", text="💾 GUARDAR TURNO [Enter]")
+            self.lbl_estado.configure(
+                text="⚠️ ¡FALTA TRABAJADOR! Escribe o selecciona el nombre.",
+                text_color="#F87171"
+            )
+            try:
+                import winsound
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+            except Exception:
+                pass
+            try:
+                self.combo_trabajador.entry.focus()
+                self.combo_trabajador.entry.configure(border_color="#EF4444")
+                def _restaurar_borde():
+                    try:
+                        self.combo_trabajador.entry.configure(border_color="#374151")
+                    except Exception:
+                        pass
+                self.after(2500, _restaurar_borde)
+            except Exception:
+                pass
+            return
+
         parqueadero = self.combo_parqueadero.get()
         fecha       = self._obtener_fecha_final()
         hoja_tipo   = "principal" if "PRINCIPAL" in self.combo_hoja.get().upper() else "pruebas"

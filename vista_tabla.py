@@ -313,8 +313,8 @@ class VistaTablaExcel(ctk.CTkFrame):
 
         # Selector de trabajador
         ctk.CTkLabel(dialogo, text="Selecciona el trabajador:").pack(anchor="w", padx=30, pady=(6, 2))
-        combo_t = ctk.CTkComboBox(dialogo, values=TRABAJADORES, width=320)
-        combo_t.set(trabajador_actual if trabajador_actual else TRABAJADORES[0])
+        combo_t = ctk.CTkComboBox(dialogo, values=["-- Seleccionar Trabajador --"] + TRABAJADORES, width=320)
+        combo_t.set(trabajador_actual if trabajador_actual else "-- Seleccionar Trabajador --")
         combo_t.pack(padx=30, pady=(0, 10))
 
         # Resumen del monto
@@ -337,7 +337,16 @@ class VistaTablaExcel(ctk.CTkFrame):
         ctk.CTkButton(f_btns, text="Cancelar", fg_color="#374151", width=90, command=dialogo.destroy).pack(side="left")
 
         def ejecutar_guardado():
-            t_elegido = combo_t.get()
+            t_elegido = combo_t.get().strip()
+            if not t_elegido or t_elegido.startswith("--"):
+                lbl_guardando.configure(text="⚠️ ¡Falta seleccionar el trabajador!", text_color="#EF4444")
+                try:
+                    import winsound
+                    winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+                except Exception:
+                    pass
+                return
+
             btn_ok.configure(state="disabled", text="Guardando...")
             lbl_guardando.configure(text="Escribiendo en Google Sheets...", text_color="#9CA3AF")
 

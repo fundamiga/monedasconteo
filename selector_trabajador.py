@@ -63,11 +63,11 @@ class SelectorTrabajador(ctk.CTkFrame):
         # 1. Avatar con color y letra inicial
         self.lbl_badge = ctk.CTkLabel(
             self,
-            text="A",
+            text="?",
             width=32,
             height=32,
             corner_radius=8,
-            fg_color=COLORES_LETRAS[0],
+            fg_color="#475569",
             text_color="#FFFFFF",
             font=ctk.CTkFont(size=14, weight="bold")
         )
@@ -76,7 +76,7 @@ class SelectorTrabajador(ctk.CTkFrame):
         # 2. Entry para escribir letras o nombre
         self.entry = ctk.CTkEntry(
             self,
-            placeholder_text="Escribe letra o nombre (ej: C, DIA)...",
+            placeholder_text="Escribe o selecciona trabajador...",
             width=max(width - 70, 160),
             height=32,
             font=ctk.CTkFont(size=12)
@@ -103,9 +103,8 @@ class SelectorTrabajador(ctk.CTkFrame):
         self.entry.bind("<Return>", self._on_enter)
         self.entry.bind("<Escape>", lambda e: self._cerrar_popup())
 
-        # Establecer valor inicial por defecto
-        if self.lista:
-            self.set(self.lista[0])
+        # Iniciar vacío para obligar al usuario a elegir trabajador
+        self._actualizar_badge("")
 
     def get(self):
         """Retorna el trabajador seleccionado actualmente."""
@@ -114,7 +113,8 @@ class SelectorTrabajador(ctk.CTkFrame):
     def set(self, valor):
         """Establece el trabajador seleccionado y actualiza el avatar de color."""
         self.entry.delete(0, "end")
-        self.entry.insert(0, valor)
+        if valor:
+            self.entry.insert(0, valor)
         self._actualizar_badge(valor)
         if self.callback_command:
             try:
@@ -125,7 +125,7 @@ class SelectorTrabajador(ctk.CTkFrame):
     def _actualizar_badge(self, texto):
         t = texto.strip().upper() if texto else ""
         letra = t[0] if t else "?"
-        color = get_color_letra(letra)
+        color = get_color_letra(letra) if t else "#475569"
         self.lbl_badge.configure(text=letra, fg_color=color)
 
     def _filtrar(self, query):
