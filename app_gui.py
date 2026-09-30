@@ -24,6 +24,7 @@ from sheets.google_sheets import (
 from ventana_conteo import VentanaConteo
 from vista_tabla import VentanaTablaExcel
 from modo_camara import VentanaCamaraOCR
+from ventana_historial import VentanaHistorial
 from actualizador import verificar_actualizacion
 
 ctk.set_appearance_mode("Dark")
@@ -233,6 +234,14 @@ class AppCC358(ctk.CTk):
             command=self._abrir_modo_camara)
         self.btn_modo_camara.pack(side="left", padx=4)
 
+        # Botón HISTORIAL Y RESPALDO
+        self.btn_historial = ctk.CTkButton(
+            fila2, text="📜 Historial", width=105, height=30,
+            fg_color="#7C3AED", hover_color="#6D28D9",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._abrir_historial)
+        self.btn_historial.pack(side="left", padx=4)
+
         # Checkbox Modo Continuo (Auto-reabrir en 0 tras guardar)
         self.chk_continuo = ctk.CTkCheckBox(
             fila2, text="Auto-reabrir en 0", font=ctk.CTkFont(size=11, weight="bold"),
@@ -347,6 +356,13 @@ class AppCC358(ctk.CTk):
         """Abre la ventana de captura con cámara web y OCR."""
         self._log("Abriendo Modo Cámara con Visión Artificial...")
         VentanaCamaraOCR(self, callback_datos=self._on_datos_recibidos, callback_log=self._log)
+
+    def _abrir_historial(self):
+        """Abre la ventana de historial y respaldo permanente de conteos."""
+        self._log("Abriendo ventana de Historial y Respaldo Permanente...")
+        v = VentanaHistorial(self)
+        v.lift()
+        v.focus()
 
     def _abrir_modo_tabla(self):
         """Abre la ventana interactiva del Modo Tabla Excel."""
@@ -1025,6 +1041,14 @@ class AppCC358(ctk.CTk):
                 self._log(f"Nombre '{trabajador}' escrito en fila {fila}.")
 
             guardar_conteo(ws, fila, monedas, billetes)
+
+            # Respaldo permanente local inmediato
+            try:
+                from historial_db import guardar_historial
+                guardar_historial(fecha, parqueadero, trabajador, monedas, billetes, hoja_tipo)
+            except Exception as ex_db:
+                print(f"Error guardando en historial: {ex_db}")
+
             self.ultimo_respaldo = {
                 "monedas": {**monedas},
                 "billetes": {**billetes},

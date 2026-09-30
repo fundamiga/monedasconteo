@@ -24,6 +24,8 @@ a = Analysis(
         ('vista_tabla.py',         '.'),
         ('modo_camara.py',         '.'),
         ('actualizador.py',        '.'),
+        ('historial_db.py',        '.'),
+        ('ventana_historial.py',   '.'),
     ],
     hiddenimports=[
         'customtkinter',
@@ -46,6 +48,7 @@ a = Analysis(
         'packaging.version',
         'urllib.request',
         'urllib.error',
+        'sqlite3',
     ],
     hookspath=[],
     hooksconfig={},

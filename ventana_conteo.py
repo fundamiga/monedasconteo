@@ -529,6 +529,14 @@ class VentanaConteo(ctk.CTkToplevel):
                 escribir_nombre_trabajador(ws, fila, trabajador)
 
             guardar_conteo(ws, fila, self.monedas, billetes)
+
+            # Respaldo permanente local inmediato
+            try:
+                from historial_db import guardar_historial
+                guardar_historial(fecha, parqueadero, trabajador, self.monedas, billetes, hoja_tipo)
+            except Exception as ex_db:
+                print(f"Error guardando en historial: {ex_db}")
+
             datos_guardados = {
                 "monedas": {**self.monedas},
                 "billetes": {**billetes},
