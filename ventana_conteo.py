@@ -565,7 +565,7 @@ class VentanaConteo(ctk.CTkToplevel):
 
     def _tarea_guardar(self, trabajador, parqueadero, fecha, billetes, hoja_tipo="pruebas"):
         try:
-            ws = conectar_sheet(hoja_tipo)
+            ws = conectar_sheet(hoja_tipo, fecha_str=fecha)
             fila = buscar_fila_trabajador(ws, fecha, parqueadero, trabajador)
 
             if fila is None:

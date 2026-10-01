@@ -143,8 +143,9 @@ class VistaTablaExcel(ctk.CTkFrame):
 
     def _hilo_cargar(self):
         try:
+            from sheets.google_sheets import obtener_fecha_hoy
             if not self.ws:
-                self.ws = conectar_sheet()
+                self.ws = conectar_sheet(fecha_str=obtener_fecha_hoy())
             datos = obtener_estructura_hoy(self.ws)
             self.after(0, self._renderizar_tabla, datos)
         except Exception as e:

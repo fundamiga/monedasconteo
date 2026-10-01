@@ -36,43 +36,104 @@ CREDS_FILE = os.path.join(obtener_ruta_base(), "config", "credentials.json")
 
 _CACHE_WS = {}
 
-def conectar_sheet(tipo_hoja="pruebas", forzar=False):
-    """Conecta con Google Sheets usando cuenta de servicio (pruebas o principal). Cachea la sesión para respuesta ultra rápida."""
+MESES_ES = {
+    1: "ENERO", 2: "FEBRERO", 3: "MARZO", 4: "ABRIL",
+    5: "MAYO", 6: "JUNIO", 7: "JULIO", 8: "AGOSTO",
+    9: "SEPTIEMBRE", 10: "OCTUBRE", 11: "NOVIEMBRE", 12: "DICIEMBRE"
+}
+
+def obtener_nombre_pestana_mes(fecha_str=None):
+    """Devuelve el nombre esperado de la pestaña según la fecha (ej: 'OCTUBRE 2026')."""
+    if fecha_str:
+        partes = str(fecha_str).strip().split('/')
+        if len(partes) >= 3:
+            try:
+                mes = int(partes[1])
+                anio = int(partes[2])
+                if mes in MESES_ES:
+                    return f"{MESES_ES[mes]} {anio}"
+            except Exception:
+                pass
+    hoy = datetime.now()
+    return f"{MESES_ES.get(hoy.month, 'OCTUBRE')} {hoy.year}"
+
+
+def conectar_sheet(tipo_hoja="pruebas", forzar=False, fecha_str=None, nombre_pestana=None):
+    """
+    Conecta con Google Sheets usando cuenta de servicio (pruebas o principal).
+    Selecciona automáticamente la pestaña del mes según la fecha (ej: 'OCTUBRE 2026', 'SEPTIEMBRE 2026').
+    Cachea la sesión para respuesta ultra rápida.
+    """
     from config.datos import SHEETS_CONFIG
     clave = "principal" if tipo_hoja.lower() == "principal" else "pruebas"
-    if not forzar and clave in _CACHE_WS:
-        return _CACHE_WS[clave]
+
+    if not nombre_pestana and fecha_str:
+        nombre_pestana = obtener_nombre_pestana_mes(fecha_str)
+
+    cache_key = f"{clave}_{nombre_pestana}" if nombre_pestana else clave
+    if not forzar and cache_key in _CACHE_WS:
+        return _CACHE_WS[cache_key]
 
     creds = Credentials.from_service_account_file(CREDS_FILE, scopes=SCOPES)
     client = gspread.authorize(creds)
     cfg = SHEETS_CONFIG[clave]
     sheet = client.open_by_key(cfg["id"])
-    # Abrir la pestaña específica por GID
-    try:
-        worksheet = sheet.get_worksheet_by_id(int(cfg["gid"]))
-    except Exception:
+
+    worksheet = None
+    # 1. Intentar abrir por nombre de pestaña dinámico según el mes (ej: 'OCTUBRE 2026')
+    if nombre_pestana:
+        try:
+            worksheet = sheet.worksheet(nombre_pestana)
+        except Exception:
+            worksheet = None
+
+    # 2. Si no, intentar por el GID configurado
+    if worksheet is None:
+        try:
+            worksheet = sheet.get_worksheet_by_id(int(cfg["gid"]))
+        except Exception:
+            worksheet = None
+
+    # 3. Si no, intentar por el sheet_name configurado
+    if worksheet is None:
         try:
             worksheet = sheet.worksheet(cfg["sheet_name"])
         except Exception:
             worksheet = sheet.sheet1
-    _CACHE_WS[clave] = worksheet
+
+    _CACHE_WS[cache_key] = worksheet
     return worksheet
 
 
 def obtener_fecha_hoy(dia=None):
     """
-    Retorna la fecha en el formato que usa el Sheet (DD/2/YYYY).
-    Por defecto retorna el DÍA ANTERIOR (ayer), ya que el recaudo siempre
-    corresponde al turno recogido el día anterior.
+    Retorna la fecha en formato D/M/YYYY correspondiente al turno.
+    Por defecto retorna la fecha del DÍA ANTERIOR (ayer), ya que el recaudo
+    siempre corresponde al turno recogido el día anterior.
+    Si se pasa un número de día:
+    - Si coincide con ayer -> día y mes de ayer (ej: 30 de septiembre).
+    - Si coincide con hoy -> día y mes de hoy (ej: 1 de octubre).
+    - Si día > hoy.day -> corresponde al mes anterior (ej: día 30 cuando hoy es 1 de octubre).
+    - Si día <= hoy.day -> corresponde a este mes (ej: día 1 cuando hoy es 1 o 2 de octubre).
     """
-    hoy = datetime.now()
+    ahora = datetime.now()
+    from datetime import timedelta
+    ayer = ahora - timedelta(days=1)
+
     if dia is None:
-        from datetime import timedelta
-        ayer = hoy - timedelta(days=1)
-        dia_num = ayer.day
+        return f"{ayer.day}/{ayer.month}/{ayer.year}"
+
+    dia_num = int(dia)
+    if dia_num == ayer.day:
+        return f"{dia_num}/{ayer.month}/{ayer.year}"
+    elif dia_num == ahora.day:
+        return f"{dia_num}/{ahora.month}/{ahora.year}"
+    elif dia_num > ahora.day:
+        mes_ant = ahora.month - 1 if ahora.month > 1 else 12
+        anio_ant = ahora.year if ahora.month > 1 else ahora.year - 1
+        return f"{dia_num}/{mes_ant}/{anio_ant}"
     else:
-        dia_num = int(dia)
-    return f"{dia_num}/2/{hoy.year}"
+        return f"{dia_num}/{ahora.month}/{ahora.year}"
 
 
 def normalizar(texto):
@@ -147,7 +208,14 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
         # Detectar fila de fecha
         if '/' in texto_a and len(texto_a) > 0 and texto_a[0].isdigit():
             partes_c = texto_a.split('/')
-            if partes_c[0].strip() == dia_buscado and (partes_c[2].strip() if len(partes_c) > 2 else False):
+            try:
+                dia_c = int(partes_c[0].strip())
+                dia_b = int(dia_buscado.strip())
+                coincide_dia = (dia_c == dia_b)
+            except Exception:
+                coincide_dia = (partes_c[0].strip() == dia_buscado)
+
+            if coincide_dia and (partes_c[2].strip() if len(partes_c) > 2 else False):
                 en_fecha = True
                 en_parqueadero = False
                 primera_vacia = None
@@ -307,7 +375,7 @@ def calcular_totales(monedas, billetes):
     return tm, tb, tm + tb
 
 
-def obtener_estructura_hoy(ws=None):
+def obtener_estructura_hoy(ws=None, dia=None):
     """
     Lee las filas de hoy agrupadas por parqueadero.
     Retorna una lista de diccionarios con parqueaderos y sus filas exactas.
@@ -317,12 +385,22 @@ def obtener_estructura_hoy(ws=None):
 
     valores = ws.get_all_values()
     inicio = None
-    dia_str = str(datetime.now().day)
+    if dia is None:
+        from datetime import timedelta
+        dia_buscado = (datetime.now() - timedelta(days=1)).day
+    else:
+        dia_buscado = int(dia)
 
     for i, r in enumerate(valores):
-        if r and r[0].strip().startswith(dia_str) and '/' in r[0]:
-            inicio = i
-            break
+        txt_a = r[0].strip() if r and len(r) > 0 else ""
+        if '/' in txt_a and txt_a[0].isdigit():
+            partes_c = txt_a.split('/')
+            try:
+                if int(partes_c[0].strip()) == dia_buscado:
+                    inicio = i
+                    break
+            except Exception:
+                pass
 
     if inicio is None:
         return []

@@ -24,7 +24,7 @@ from packaging.version import Version
 # ── Configuración ────────────────────────────────────────────────────────────
 GITHUB_OWNER  = "fundamiga"
 GITHUB_REPO   = "monedasconteo"
-VERSION_ACTUAL = "1.0.8"          # <-- Actualiza esto en cada release que hagas
+VERSION_ACTUAL = "1.0.9"          # <-- Actualiza esto en cada release que hagas
 NOMBRE_EXE    = "ConteoCC358.exe" # <-- Nombre exacto del .exe en el release
 # ─────────────────────────────────────────────────────────────────────────────
 

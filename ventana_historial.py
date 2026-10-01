@@ -266,7 +266,7 @@ class VentanaHistorial(ctk.CTkToplevel):
 
         def _tarea():
             try:
-                ws = conectar_sheet(hoja_tipo)
+                ws = conectar_sheet(hoja_tipo, fecha_str=fecha)
                 fila = buscar_fila_trabajador(ws, fecha, parqueadero, trabajador)
                 if fila is None:
                     self.after(0, lambda: self.lbl_estado_reenvio.configure(

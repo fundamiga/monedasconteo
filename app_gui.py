@@ -1051,7 +1051,7 @@ class AppCC358(ctk.CTk):
     def _tarea_guardar(self, trabajador, parqueadero, fecha, monedas, billetes, hoja_tipo="pruebas"):
         try:
             self._log(f"Buscando fila en {hoja_tipo.upper()}: {fecha} | {parqueadero} | {trabajador}...")
-            ws = conectar_sheet(hoja_tipo)
+            ws = conectar_sheet(hoja_tipo, fecha_str=fecha)
             fila = buscar_fila_trabajador(ws, fecha, parqueadero, trabajador)
 
             if fila is None:
