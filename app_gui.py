@@ -25,6 +25,7 @@ from ventana_conteo import VentanaConteo
 from vista_tabla import VentanaTablaExcel
 from modo_camara import VentanaCamaraOCR
 from ventana_historial import VentanaHistorial
+from ventana_estadisticas import VentanaEstadisticas
 from actualizador import verificar_actualizacion
 
 ctk.set_appearance_mode("Dark")
@@ -242,6 +243,14 @@ class AppCC358(ctk.CTk):
             command=self._abrir_historial)
         self.btn_historial.pack(side="left", padx=4)
 
+        # Botón BALANCES Y ESTADÍSTICAS
+        self.btn_estadisticas = ctk.CTkButton(
+            fila2, text="📈 Balances", width=105, height=30,
+            fg_color="#059669", hover_color="#047857",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            command=self._abrir_estadisticas)
+        self.btn_estadisticas.pack(side="left", padx=4)
+
         # Checkbox Modo Continuo (Auto-reabrir en 0 tras guardar)
         self.chk_continuo = ctk.CTkCheckBox(
             fila2, text="Auto-reabrir en 0", font=ctk.CTkFont(size=11, weight="bold"),
@@ -361,6 +370,13 @@ class AppCC358(ctk.CTk):
         """Abre la ventana de historial y respaldo permanente de conteos."""
         self._log("Abriendo ventana de Historial y Respaldo Permanente...")
         v = VentanaHistorial(self)
+        v.lift()
+        v.focus()
+
+    def _abrir_estadisticas(self):
+        """Abre la ventana de Balances, Nómina y Estadísticas."""
+        self._log("Abriendo Balances y Estadísticas de Recaudo...")
+        v = VentanaEstadisticas(self)
         v.lift()
         v.focus()
 

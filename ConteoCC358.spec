@@ -26,6 +26,7 @@ a = Analysis(
         ('actualizador.py',        '.'),
         ('historial_db.py',        '.'),
         ('ventana_historial.py',   '.'),
+        ('ventana_estadisticas.py', '.'),
     ],
     hiddenimports=[
         'customtkinter',
