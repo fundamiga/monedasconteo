@@ -44,6 +44,12 @@ def init_db():
         conn.execute("CREATE INDEX IF NOT EXISTS idx_fecha_turno ON conteos(fecha_turno)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON conteos(timestamp)")
 
+        # Migración automática: corregir fechas antiguas de Septiembre que venían con /2/2026
+        try:
+            conn.execute("UPDATE conteos SET fecha_turno = REPLACE(fecha_turno, '/2/2026', '/9/2026') WHERE fecha_turno LIKE '%/2/2026'")
+        except Exception:
+            pass
+
 
 def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, hoja_tipo="principal"):
     """Guarda un conteo en la base de datos local permanente."""
@@ -352,6 +358,17 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
         "BOLIVAR", "GUABINAS"
     }
 
+    MESES_MAP = {
+        "ENERO": 1, "FEBRERO": 2, "MARZO": 3, "ABRIL": 4,
+        "MAYO": 5, "JUNIO": 6, "JULIO": 7, "AGOSTO": 8,
+        "SEPTIEMBRE": 9, "OCTUBRE": 10, "NOVIEMBRE": 11, "DICIEMBRE": 12
+    }
+    mes_num_real = None
+    for nom_m, num_m in MESES_MAP.items():
+        if nom_m in str(mes_nombre).upper():
+            mes_num_real = num_m
+            break
+
     fecha_actual = ""
     parqueadero_actual = ""
     importados = 0
@@ -364,9 +381,13 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
             txt_a = str(r[0]).strip() if len(r) > 0 else ""
             txt_norm = normalizar(txt_a)
 
-            # Detectar fecha
+            # Detectar fecha y normalizar con el mes real de la pestaña
             if '/' in txt_a and len(txt_a) > 0 and txt_a[0].isdigit():
-                fecha_actual = txt_a
+                partes_f = txt_a.split('/')
+                dia_f = partes_f[0].strip()
+                anio_f = partes_f[2].strip() if len(partes_f) > 2 else '2026'
+                mes_f = mes_num_real if mes_num_real else (partes_f[1].strip() if len(partes_f) > 1 else '9')
+                fecha_actual = f"{dia_f}/{mes_f}/{anio_f}"
                 parqueadero_actual = ""
                 continue
 
