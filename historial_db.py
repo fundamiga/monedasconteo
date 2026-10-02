@@ -289,6 +289,65 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
     pct_monedas = round((tot_monedas * 100 / tot_general), 1) if tot_general > 0 else 0
     pct_billetes = round((tot_billetes * 100 / tot_general), 1) if tot_general > 0 else 0
 
+    # ── Balance Financiero y Cruce con Nómina (Supabase) ──
+    try:
+        from nomina_supabase import obtener_resumen_nomina
+        resumen_nom = obtener_resumen_nomina(mes=mes, anio=anio, quincena=quincena)
+        por_parq_nom = resumen_nom.get("por_parqueadero", {})
+    except Exception:
+        resumen_nom = {
+            "gastos_admin": {"q1": 0, "q2": 0, "total": 0},
+            "gastos_remesas": {"q1": 0, "q2": 0, "total": 0},
+            "total_general": {"q1": 0, "q2": 0, "total": 0, "total_personas": 0},
+            "quincenas_encontradas": []
+        }
+        por_parq_nom = {}
+
+    balance_financiero = []
+    tot_nomina_parq = 0
+
+    todos_parqs = sorted(list(set(parqueaderos_map.keys()) | set(por_parq_nom.keys())))
+    for p_nom in todos_parqs:
+        rec_data = parqueaderos_map.get(p_nom, {"turnos": 0, "total_recaudo": 0, "total_monedas": 0, "total_billetes": 0})
+        nom_data = por_parq_nom.get(p_nom, {"q1": 0, "q2": 0, "total": 0, "arl": 0, "personas": 0})
+
+        recaudo = rec_data["total_recaudo"]
+        nomina_q1 = nom_data["q1"]
+        nomina_q2 = nom_data["q2"]
+        nomina_total = nom_data["total"]
+        tot_nomina_parq += nomina_total
+
+        ganancia_neta = recaudo - nomina_total
+        margen_pct = round((ganancia_neta / recaudo) * 100, 1) if recaudo > 0 else (0.0 if nomina_total == 0 else -100.0)
+
+        if ganancia_neta > 0 and margen_pct >= 25:
+            estado = "RENTABLE"
+        elif ganancia_neta >= 0:
+            estado = "EQUILIBRIO"
+        else:
+            estado = "DEFICIT"
+
+        balance_financiero.append({
+            "parqueadero": p_nom,
+            "turnos": rec_data["turnos"],
+            "recaudo": recaudo,
+            "nomina_q1": nomina_q1,
+            "nomina_q2": nomina_q2,
+            "nomina_total": nomina_total,
+            "ganancia_neta": ganancia_neta,
+            "margen_pct": margen_pct,
+            "personas_nomina": nom_data["personas"],
+            "estado": estado
+        })
+
+    balance_financiero.sort(key=lambda x: x["ganancia_neta"], reverse=True)
+
+    gastos_admin = resumen_nom["gastos_admin"]["total"]
+    gastos_remesas = resumen_nom["gastos_remesas"]["total"]
+    total_nomina_general = resumen_nom["total_general"]["total"]
+    utilidad_neta_fundacion = tot_general - total_nomina_general
+    margen_fundacion_pct = round((utilidad_neta_fundacion / tot_general) * 100, 1) if tot_general > 0 else 0
+
     return {
         "totales": {
             "total_recaudo": tot_general,
@@ -303,7 +362,17 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
         "top_recaudo": top_recaudo,
         "trabajadores": lista_trabajadores,
         "parqueaderos": lista_parqueaderos,
-        "total_registros": len(filtrados)
+        "total_registros": len(filtrados),
+        "balance_financiero": balance_financiero,
+        "resumen_nomina": {
+            "total_nomina_parqueaderos": tot_nomina_parq,
+            "gastos_admin": gastos_admin,
+            "gastos_remesas": gastos_remesas,
+            "total_nomina_general": total_nomina_general,
+            "utilidad_neta_fundacion": utilidad_neta_fundacion,
+            "margen_fundacion_pct": margen_fundacion_pct,
+            "quincenas_encontradas": resumen_nom["quincenas_encontradas"]
+        }
     }
 
 
@@ -337,6 +406,40 @@ def exportar_reporte_balance_csv(ruta_archivo, balance_data, periodo_texto=""):
                 t["promedio"],
                 ", ".join(t["parqueaderos"])
             ])
+
+        # Sección 2: Balance Financiero por Parqueadero (Recaudo vs Nómina)
+        if "balance_financiero" in balance_data and balance_data["balance_financiero"]:
+            writer.writerow([])
+            writer.writerow(["BALANCE FINANCIERO Y RENTABILIDAD POR PARQUEADERO (RECAUDO VS NÓMINA)"])
+            writer.writerow([
+                "Posición", "Parqueadero", "Turnos (#)", "Recaudo Máquina ($)",
+                "Nómina Q1 ($)", "Nómina Q2 ($)", "Total Nómina ($)",
+                "Ganancia Neta ($)", "Margen (%)", "Estado"
+            ])
+            for idx, p in enumerate(balance_data["balance_financiero"], 1):
+                writer.writerow([
+                    idx,
+                    p["parqueadero"],
+                    p["turnos"],
+                    p["recaudo"],
+                    p["nomina_q1"],
+                    p["nomina_q2"],
+                    p["nomina_total"],
+                    p["ganancia_neta"],
+                    f"{p['margen_pct']}%",
+                    p["estado"]
+                ])
+            res_nom = balance_data.get("resumen_nomina", {})
+            writer.writerow([])
+            writer.writerow(["RESUMEN FINANCIERO GENERAL"])
+            writer.writerow(["Total Recaudo Máquina ($)", balance_data["totales"]["total_recaudo"]])
+            writer.writerow(["Total Nómina Parqueaderos ($)", res_nom.get("total_nomina_parqueaderos", 0)])
+            writer.writerow(["Gastos Administración ($)", res_nom.get("gastos_admin", 0)])
+            writer.writerow(["Gastos Remesas ($)", res_nom.get("gastos_remesas", 0)])
+            writer.writerow(["Total Nómina General ($)", res_nom.get("total_nomina_general", 0)])
+            writer.writerow(["GANANCIA NETA LIBRE FUNDACIÓN ($)", res_nom.get("utilidad_neta_fundacion", 0)])
+            writer.writerow(["MARGEN LIBRE (%)", f"{res_nom.get('margen_fundacion_pct', 0)}%"])
+
     return len(balance_data["trabajadores"])
 
 

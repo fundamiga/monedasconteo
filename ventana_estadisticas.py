@@ -167,7 +167,7 @@ class VentanaEstadisticas(ctk.CTkToplevel):
 
         self.tab_trabajadores = self.tabview.add("👥 Ranking por Persona (Nómina y Turnos)")
         self.tab_graficas = self.tabview.add("📊 Gráficas y Comparativas")
-        self.tab_parqueaderos = self.tabview.add("🏢 Balance por Parqueadero")
+        self.tab_parqueaderos = self.tabview.add("🏢 Rentabilidad y Balance por Parqueadero")
 
         self._crear_tab_trabajadores()
         self._crear_tab_graficas()
@@ -307,40 +307,82 @@ class VentanaEstadisticas(ctk.CTkToplevel):
     def _crear_tab_parqueaderos(self):
         tab = self.tab_parqueaderos
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(0, weight=1)
+        tab.grid_rowconfigure(2, weight=1)
 
-        f_parq = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
-        f_parq.grid(row=0, column=0, padx=8, pady=8, sticky="nsew")
-        f_parq.grid_columnconfigure(0, weight=1)
-        f_parq.grid_rowconfigure(1, weight=1)
+        # 1. Barra superior: Título y Botón Sincronizar Nómina Supabase
+        f_top = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
+        f_top.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
 
         ctk.CTkLabel(
-            f_parq, text="🏢 Producción y Recaudo Total por Parqueadero en el Período:",
-            font=ctk.CTkFont(size=12, weight="bold"), text_color="#38BDF8"
-        ).grid(row=0, column=0, padx=10, pady=(8, 4), sticky="w")
+            f_top,
+            text="🏢 Balance Financiero: Recaudo en Máquina vs Nómina Pagada (Supabase)",
+            font=ctk.CTkFont(size=12, weight="bold"),
+            text_color="#38BDF8"
+        ).pack(side="left", padx=12, pady=6)
 
-        f_tree_p = ctk.CTkFrame(f_parq, fg_color="transparent")
-        f_tree_p.grid(row=1, column=0, padx=8, pady=(0, 8), sticky="nsew")
+        self.btn_sync_nomina = ctk.CTkButton(
+            f_top,
+            text="🔄 Sincronizar Nómina (Supabase)",
+            fg_color="#0284C7", hover_color="#0369A1",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            height=28, width=205,
+            command=self._sincronizar_nomina
+        )
+        self.btn_sync_nomina.pack(side="right", padx=10, pady=6)
+
+        # 2. Tarjetas Resumen Financiero del Período
+        f_kpi_fin = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
+        f_kpi_fin.grid(row=1, column=0, padx=8, pady=(0, 6), sticky="ew")
+        for i in range(5):
+            f_kpi_fin.grid_columnconfigure(i, weight=1)
+
+        def _sub_kpi(col, titulo, valor, color):
+            f = ctk.CTkFrame(f_kpi_fin, fg_color="#1E293B", corner_radius=6, border_width=1, border_color="#334155")
+            f.grid(row=0, column=col, padx=4, pady=6, sticky="ew")
+            ctk.CTkLabel(f, text=titulo, font=ctk.CTkFont(size=9, weight="bold"), text_color="#94A3B8").pack(anchor="w", padx=8, pady=(4, 1))
+            lbl = ctk.CTkLabel(f, text=valor, font=ctk.CTkFont(size=13, weight="bold"), text_color=color)
+            lbl.pack(anchor="w", padx=8, pady=(0, 4))
+            return lbl
+
+        self.lbl_fin_rec = _sub_kpi(0, "🪙 RECAUDO MÁQUINA", "$ 0", "#38BDF8")
+        self.lbl_fin_nom = _sub_kpi(1, "👥 NÓMINA PARQUEADEROS", "$ 0", "#F59E0B")
+        self.lbl_fin_adm = _sub_kpi(2, "🏢 ADMIN / REMESAS", "$ 0", "#A855F7")
+        self.lbl_fin_neto = _sub_kpi(3, "🏆 GANANCIA NETA LIBRE", "$ 0", "#10B981")
+        self.lbl_fin_margen = _sub_kpi(4, "📈 MARGEN LIBRE %", "0%", "#10B981")
+
+        # 3. Tabla Financiera Comparativa (Recaudo vs Nómina)
+        f_tree_p = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
+        f_tree_p.grid(row=2, column=0, padx=8, pady=(0, 8), sticky="nsew")
         f_tree_p.grid_columnconfigure(0, weight=1)
         f_tree_p.grid_rowconfigure(0, weight=1)
 
-        cols_p = ("pos", "parqueadero", "turnos", "total", "monedas", "billetes", "aporte")
+        cols_p = ("pos", "parqueadero", "turnos", "recaudo", "nomina_q1", "nomina_q2", "nomina_tot", "ganancia", "margen", "estado")
         self.tree_parq = ttk.Treeview(f_tree_p, columns=cols_p, show="headings", selectmode="none")
         self.tree_parq.heading("pos", text="#")
         self.tree_parq.heading("parqueadero", text="Parqueadero")
         self.tree_parq.heading("turnos", text="Turnos (#)")
-        self.tree_parq.heading("total", text="Total Recaudado")
-        self.tree_parq.heading("monedas", text="Total Monedas")
-        self.tree_parq.heading("billetes", text="Total Billetes")
-        self.tree_parq.heading("aporte", text="% Aporte Total")
+        self.tree_parq.heading("recaudo", text="🪙 Recaudo")
+        self.tree_parq.heading("nomina_q1", text="Nómina Q1")
+        self.tree_parq.heading("nomina_q2", text="Nómina Q2")
+        self.tree_parq.heading("nomina_tot", text="👥 Total Nómina")
+        self.tree_parq.heading("ganancia", text="🟢 Ganancia Neta")
+        self.tree_parq.heading("margen", text="📊 Margen %")
+        self.tree_parq.heading("estado", text="Estado")
 
-        self.tree_parq.column("pos", width=40, anchor="center")
-        self.tree_parq.column("parqueadero", width=160, anchor="w")
-        self.tree_parq.column("turnos", width=90, anchor="center")
-        self.tree_parq.column("total", width=130, anchor="e")
-        self.tree_parq.column("monedas", width=120, anchor="e")
-        self.tree_parq.column("billetes", width=120, anchor="e")
-        self.tree_parq.column("aporte", width=100, anchor="center")
+        self.tree_parq.column("pos", width=35, anchor="center")
+        self.tree_parq.column("parqueadero", width=140, anchor="w")
+        self.tree_parq.column("turnos", width=80, anchor="center")
+        self.tree_parq.column("recaudo", width=115, anchor="e")
+        self.tree_parq.column("nomina_q1", width=105, anchor="e")
+        self.tree_parq.column("nomina_q2", width=105, anchor="e")
+        self.tree_parq.column("nomina_tot", width=115, anchor="e")
+        self.tree_parq.column("ganancia", width=125, anchor="e")
+        self.tree_parq.column("margen", width=80, anchor="center")
+        self.tree_parq.column("estado", width=110, anchor="center")
+
+        self.tree_parq.tag_configure("rentable", foreground="#10B981")
+        self.tree_parq.tag_configure("equilibrio", foreground="#F59E0B")
+        self.tree_parq.tag_configure("deficit", foreground="#EF4444")
 
         sb_p = ttk.Scrollbar(f_tree_p, orient="vertical", command=self.tree_parq.yview)
         self.tree_parq.configure(yscrollcommand=sb_p.set)
@@ -390,7 +432,11 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         self._actualizar_kpis(data["totales"], data["top_turnos"], data["top_recaudo"])
         self._renderizar_tabla_trabajadores(data["trabajadores"])
         self._renderizar_graficas(data)
-        self._renderizar_tabla_parqueaderos(data["parqueaderos"], data["totales"]["total_recaudo"])
+        self._renderizar_tabla_parqueaderos(
+            data.get("balance_financiero", []),
+            data.get("resumen_nomina", {}),
+            data["totales"]["total_recaudo"]
+        )
 
     def _actualizar_kpis(self, totales, top_turnos, top_recaudo):
         self.kpi_total.configure(text=fmt_cop(totales["total_recaudo"]))
@@ -503,21 +549,51 @@ class VentanaEstadisticas(ctk.CTkToplevel):
             prog.pack(fill="x", padx=8, pady=(0, 6))
             prog.set(ratio_barra)
 
-    def _renderizar_tabla_parqueaderos(self, parqs, tot_general):
+    def _renderizar_tabla_parqueaderos(self, balance_fin, res_nom, tot_general):
         for item in self.tree_parq.get_children():
             self.tree_parq.delete(item)
 
-        for idx, p in enumerate(parqs, 1):
-            pct = f"{round((p['total_recaudo'] * 100 / tot_general), 1)}%" if tot_general > 0 else "0%"
+        if not balance_fin:
+            self.lbl_fin_rec.configure(text="$ 0")
+            self.lbl_fin_nom.configure(text="$ 0")
+            self.lbl_fin_adm.configure(text="$ 0")
+            self.lbl_fin_neto.configure(text="$ 0", text_color="#10B981")
+            self.lbl_fin_margen.configure(text="0%", text_color="#10B981")
+            return
+
+        for idx, p in enumerate(balance_fin, 1):
+            estado_tag = p.get("estado", "EQUILIBRIO").lower()
+            gn = p.get("ganancia_neta", 0)
+            signo = "+" if gn > 0 else ""
+            ganancia_txt = f"{signo}{fmt_cop(gn)}"
+            
             self.tree_parq.insert("", "end", values=(
                 idx,
                 p["parqueadero"],
                 f"{p['turnos']} turnos",
-                fmt_cop(p["total_recaudo"]),
-                fmt_cop(p["total_monedas"]),
-                fmt_cop(p["total_billetes"]),
-                pct
-            ))
+                fmt_cop(p["recaudo"]),
+                fmt_cop(p["nomina_q1"]),
+                fmt_cop(p["nomina_q2"]),
+                fmt_cop(p["nomina_total"]),
+                ganancia_txt,
+                f"{p['margen_pct']}%",
+                f"● {p['estado']}"
+            ), tags=(estado_tag,))
+
+        # Actualizar KPIs financieros del tab
+        tot_nom_parq = res_nom.get("total_nomina_parqueaderos", 0)
+        tot_adm = res_nom.get("gastos_admin", 0) + res_nom.get("gastos_remesas", 0)
+        utilidad = res_nom.get("utilidad_neta_fundacion", 0)
+        margen = res_nom.get("margen_fundacion_pct", 0)
+
+        self.lbl_fin_rec.configure(text=fmt_cop(tot_general))
+        self.lbl_fin_nom.configure(text=fmt_cop(tot_nom_parq))
+        self.lbl_fin_adm.configure(text=fmt_cop(tot_adm))
+
+        color_utilidad = "#10B981" if utilidad >= 0 else "#EF4444"
+        signo_u = "+" if utilidad > 0 else ""
+        self.lbl_fin_neto.configure(text=f"{signo_u}{fmt_cop(utilidad)}", text_color=color_utilidad)
+        self.lbl_fin_margen.configure(text=f"{margen}%", text_color=color_utilidad)
 
     def _limpiar_filtros(self):
         self.entry_buscar.delete(0, "end")
@@ -573,6 +649,34 @@ class VentanaEstadisticas(ctk.CTkToplevel):
                         parent=self
                     )
                 self._cargar_datos()
+            self.after(0, _fin)
+
+        threading.Thread(target=_tarea, daemon=True).start()
+
+    def _sincronizar_nomina(self):
+        """Descarga en segundo plano las últimas liquidaciones desde Supabase y actualiza la UI."""
+        self.btn_sync_nomina.configure(state="disabled", text="⏳ Conectando...")
+
+        def _tarea():
+            from nomina_supabase import sincronizar_liquidaciones_supabase
+            total, err = sincronizar_liquidaciones_supabase()
+
+            def _fin():
+                self.btn_sync_nomina.configure(state="normal", text="🔄 Sincronizar Nómina (Supabase)")
+                if err:
+                    messagebox.showerror(
+                        "Error al Sincronizar Nómina",
+                        f"No se pudo conectar a Supabase:\n{err}",
+                        parent=self
+                    )
+                else:
+                    messagebox.showinfo(
+                        "Nómina Sincronizada",
+                        f"✅ Se sincronizaron {total} liquidaciones desde Supabase.\nLos balances de rentabilidad están actualizados.",
+                        parent=self
+                    )
+                    self._cargar_datos()
+
             self.after(0, _fin)
 
         threading.Thread(target=_tarea, daemon=True).start()

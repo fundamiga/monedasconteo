@@ -27,6 +27,7 @@ a = Analysis(
         ('historial_db.py',        '.'),
         ('ventana_historial.py',   '.'),
         ('ventana_estadisticas.py', '.'),
+        ('nomina_supabase.py',     '.'),
     ],
     hiddenimports=[
         'customtkinter',
