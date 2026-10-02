@@ -136,6 +136,79 @@ def obtener_fecha_hoy(dia=None):
         return f"{dia_num}/{ahora.month}/{ahora.year}"
 
 
+MESES_ABREV = {
+    1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr',
+    5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago',
+    9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
+}
+
+def generar_opciones_fechas_combo():
+    """
+    Genera lista amigable de opciones para el selector de fecha del turno.
+    Incluye siempre los últimos 5 a 7 días hábiles recientes (con días del mes anterior si aplica)
+    y los días del mes actual.
+    """
+    ahora = datetime.now()
+    from datetime import timedelta
+    import calendar
+
+    ayer = ahora - timedelta(days=1)
+    opciones = []
+    fechas_vistas = set()
+
+    # 1. Ayer (por defecto)
+    txt_ayer = f"{ayer.day}/{ayer.month}/{ayer.year} — Ayer ({ayer.day} {MESES_ABREV[ayer.month]})"
+    opciones.append(txt_ayer)
+    fechas_vistas.add((ayer.day, ayer.month, ayer.year))
+
+    # 2. Hoy
+    txt_hoy = f"{ahora.day}/{ahora.month}/{ahora.year} — Hoy ({ahora.day} {MESES_ABREV[ahora.month]})"
+    opciones.append(txt_hoy)
+    fechas_vistas.add((ahora.day, ahora.month, ahora.year))
+
+    # 3. Días hábiles anteriores recientes (últimos 7 días para cubrir rezagados del mes anterior o semana previa)
+    for i in range(2, 8):
+        d_pasado = ahora - timedelta(days=i)
+        clave = (d_pasado.day, d_pasado.month, d_pasado.year)
+        if clave not in fechas_vistas:
+            etiqueta = "Mes Anterior" if d_pasado.month != ahora.month else "Día hábil"
+            txt = f"{d_pasado.day}/{d_pasado.month}/{d_pasado.year} — {d_pasado.day} {MESES_ABREV[d_pasado.month]} ({etiqueta})"
+            opciones.append(txt)
+            fechas_vistas.add(clave)
+
+    # 4. Resto de días del mes actual (1 al último día)
+    _, max_dias = calendar.monthrange(ahora.year, ahora.month)
+    for d in range(1, max_dias + 1):
+        clave = (d, ahora.month, ahora.year)
+        if clave not in fechas_vistas:
+            txt = f"{d}/{ahora.month}/{ahora.year} — Día {d} {MESES_ABREV[ahora.month]}"
+            opciones.append(txt)
+            fechas_vistas.add(clave)
+
+    return opciones
+
+
+def extraer_fecha_de_opcion(texto):
+    """
+    Extrae la fecha en formato D/M/YYYY del texto seleccionado en el combo.
+    Ejemplo: '30/9/2026 — 30 Sep (Mes Anterior)' -> '30/9/2026'
+    """
+    if not texto:
+        return obtener_fecha_hoy()
+    txt = str(texto).strip()
+    if " — " in txt:
+        return txt.split(" — ")[0].strip()
+    if '/' in txt:
+        partes = [p.strip() for p in txt.split('/') if p.strip()]
+        if len(partes) >= 3:
+            return f"{partes[0]}/{partes[1]}/{partes[2]}"
+    import re
+    m = re.search(r'\d+', txt)
+    if m:
+        return obtener_fecha_hoy(int(m.group(0)))
+    return obtener_fecha_hoy()
+
+
 def normalizar(texto):
     """Normaliza texto para comparación."""
     if not texto:

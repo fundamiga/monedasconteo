@@ -359,18 +359,19 @@ class VentanaConteo(ctk.CTkToplevel):
         f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
         f_dia.grid(row=1, column=3, padx=(4, 10), pady=(0, 5), sticky="ew")
 
-        from datetime import datetime, timedelta
-        ayer_dia = (datetime.now() - timedelta(days=1)).day
-        dias_opciones = [f"Dia {d} (Ayer)" if d == ayer_dia else f"Dia {d} (Hoy)" if d == datetime.now().day else f"Dia {d}" for d in range(1, 32)]
+        from sheets.google_sheets import generar_opciones_fechas_combo, extraer_fecha_de_opcion, obtener_nombre_pestana_mes
+        dias_opciones = generar_opciones_fechas_combo()
 
         self.combo_dia = ctk.CTkComboBox(
-            f_dia, values=dias_opciones, width=140, height=28,
+            f_dia, values=dias_opciones, width=240, height=28,
             command=self._on_cambio_dia)
-        self.combo_dia.set(f"Dia {ayer_dia} (Ayer)")
+        self.combo_dia.set(dias_opciones[0])
         self.combo_dia.pack(side="left")
 
+        fecha_ini = extraer_fecha_de_opcion(dias_opciones[0])
+        pestana_ini = obtener_nombre_pestana_mes(fecha_ini)
         self.lbl_fecha_txt = ctk.CTkLabel(
-            f_dia, text=obtener_fecha_hoy(ayer_dia),
+            f_dia, text=f"📁 {pestana_ini}",
             text_color="#10B981", font=ctk.CTkFont(size=12, weight="bold"))
         self.lbl_fecha_txt.pack(side="left", padx=8)
 
@@ -508,18 +509,14 @@ class VentanaConteo(ctk.CTkToplevel):
         self.lbl_total.configure(text=fmt_cop(self._tm + tb))
 
     def _on_cambio_dia(self, valor):
-        import re
-        m = re.search(r'\d+', valor)
-        if m:
-            dia_num = int(m.group(0))
-            self.lbl_fecha_txt.configure(text=obtener_fecha_hoy(dia_num))
+        from sheets.google_sheets import extraer_fecha_de_opcion, obtener_nombre_pestana_mes
+        fecha_res = extraer_fecha_de_opcion(valor)
+        pestana = obtener_nombre_pestana_mes(fecha_res)
+        self.lbl_fecha_txt.configure(text=f"📁 {pestana}")
 
     def _obtener_fecha_final(self):
-        import re
-        txt = self.combo_dia.get()
-        m = re.search(r'\d+', txt)
-        dia_num = int(m.group(0)) if m else None
-        return obtener_fecha_hoy(dia_num)
+        from sheets.google_sheets import extraer_fecha_de_opcion
+        return extraer_fecha_de_opcion(self.combo_dia.get())
 
     def _guardar(self):
         trabajador  = self.combo_trabajador.get().strip()

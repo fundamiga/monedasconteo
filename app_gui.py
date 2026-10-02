@@ -424,19 +424,20 @@ class AppCC358(ctk.CTk):
         fecha_frame = ctk.CTkFrame(seleccion, fg_color="transparent")
         fecha_frame.grid(row=2, column=1, sticky="ew", padx=(8, 0), pady=3)
 
-        from datetime import datetime, timedelta
-        ayer_dia = (datetime.now() - timedelta(days=1)).day
-        dias_opciones = [f"Dia {d} (Ayer)" if d == ayer_dia else f"Dia {d} (Hoy)" if d == datetime.now().day else f"Dia {d}" for d in range(1, 32)]
+        from sheets.google_sheets import generar_opciones_fechas_combo, extraer_fecha_de_opcion, obtener_nombre_pestana_mes
+        dias_opciones = generar_opciones_fechas_combo()
         
         self.combo_dia = ctk.CTkComboBox(
-            fecha_frame, values=dias_opciones, width=160,
+            fecha_frame, values=dias_opciones, width=270, height=28,
             command=self._on_cambio_dia)
-        self.combo_dia.set(f"Dia {ayer_dia} (Ayer)")
+        self.combo_dia.set(dias_opciones[0])
         self.combo_dia.pack(side="left")
 
+        fecha_ini = extraer_fecha_de_opcion(dias_opciones[0])
+        pestana_ini = obtener_nombre_pestana_mes(fecha_ini)
         self.lbl_fecha = ctk.CTkLabel(
-            fecha_frame, text=obtener_fecha_hoy(ayer_dia),
-            text_color="#10B981", font=ctk.CTkFont(weight="bold"))
+            fecha_frame, text=f"📁 {pestana_ini}",
+            text_color="#10B981", font=ctk.CTkFont(size=12, weight="bold"))
         self.lbl_fecha.pack(side="left", padx=10)
 
         # ── 2. MONEDAS (automáticas desde CC358) ──
@@ -984,17 +985,14 @@ class AppCC358(ctk.CTk):
     # ─────────────────────────────────────────
 
     def _on_cambio_dia(self, valor):
-        import re
-        m = re.search(r'\d+', valor)
-        if m:
-            dia_num = int(m.group(0))
-            self.lbl_fecha.configure(text=obtener_fecha_hoy(dia_num))
+        from sheets.google_sheets import extraer_fecha_de_opcion, obtener_nombre_pestana_mes
+        fecha_res = extraer_fecha_de_opcion(valor)
+        pestana = obtener_nombre_pestana_mes(fecha_res)
+        self.lbl_fecha.configure(text=f"📁 {pestana}")
 
-    def _obtener_dia_seleccionado(self):
-        import re
-        txt = self.combo_dia.get()
-        m = re.search(r'\d+', txt)
-        return int(m.group(0)) if m else None
+    def _obtener_fecha_seleccionada(self):
+        from sheets.google_sheets import extraer_fecha_de_opcion
+        return extraer_fecha_de_opcion(self.combo_dia.get())
 
     def _obtener_hoja_tipo(self):
         return "principal" if "PRINCIPAL" in self.combo_hoja.get().upper() else "pruebas"
@@ -1048,8 +1046,7 @@ class AppCC358(ctk.CTk):
             return
 
         parqueadero = self.combo_parqueadero.get()
-        dia_sel     = self._obtener_dia_seleccionado()
-        fecha       = obtener_fecha_hoy(dia_sel)
+        fecha       = self._obtener_fecha_seleccionada()
         hoja_tipo   = self._obtener_hoja_tipo()
         monedas     = self._leer_monedas()
         billetes    = self._leer_billetes()
