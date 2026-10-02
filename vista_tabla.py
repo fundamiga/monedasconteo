@@ -97,6 +97,7 @@ class VistaTablaExcel(ctk.CTkFrame):
         ).pack(side="left", padx=(10, 6), pady=6)
 
         self.campos_billetes = {}
+        self._entradas_billetes = []
         for denom, clave in [
             ("$2k", "2000"), ("$5k", "5000"), ("$10k", "10000"),
             ("$20k", "20000"), ("$50k", "50000"), ("$100k", "100000")
@@ -106,6 +107,35 @@ class VistaTablaExcel(ctk.CTkFrame):
             e.pack(side="left", padx=(0, 6))
             e.bind("<KeyRelease>", lambda evt: self._recalcular_totales_billetes())
             self.campos_billetes[clave] = e
+            self._entradas_billetes.append(e)
+
+        # ── Navegación con flechas (Derecha / Izquierda / Abajo / Arriba) ──
+        for idx, ent in enumerate(self._entradas_billetes):
+            def _crear_nav_tabla(i):
+                def _ir_siguiente(event=None):
+                    if i < len(self._entradas_billetes) - 1:
+                        nxt = self._entradas_billetes[i + 1]
+                        nxt.focus_set()
+                        nxt.after(10, lambda: nxt.select_range(0, "end"))
+                        return "break"
+                    return None
+
+                def _ir_anterior(event=None):
+                    if i > 0:
+                        prv = self._entradas_billetes[i - 1]
+                        prv.focus_set()
+                        prv.after(10, lambda: prv.select_range(0, "end"))
+                        return "break"
+                    return None
+
+                return _ir_siguiente, _ir_anterior
+
+            ir_sig, ir_ant = _crear_nav_tabla(idx)
+            ent.bind("<Down>", ir_sig)
+            ent.bind("<Right>", ir_sig)
+            ent.bind("<Up>", ir_ant)
+            ent.bind("<Left>", ir_ant)
+            ent.bind("<FocusIn>", lambda e, w=ent: w.after(10, lambda: w.select_range(0, "end")))
 
         self.lbl_total_vista = ctk.CTkLabel(
             f_billetes,

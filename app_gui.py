@@ -479,6 +479,7 @@ class AppCC358(ctk.CTk):
         billetes_frame.pack(fill="x", padx=15, pady=2)
 
         self.campos_billetes = {}
+        self._entradas_billetes = []
         billetes_def = [
             ("$2.000",    "2000"),
             ("$5.000",    "5000"),
@@ -497,6 +498,38 @@ class AppCC358(ctk.CTk):
             ctk.CTkLabel(fila, text="unidades", text_color="#9CA3AF").pack(side="left")
             entry.bind("<KeyRelease>", lambda e: self._actualizar_totales())
             self.campos_billetes[key] = entry
+            self._entradas_billetes.append(entry)
+
+        # ── Navegación con flechas (Arriba / Abajo) entre cuadritos de billetes ──
+        for idx, ent in enumerate(self._entradas_billetes):
+            def _crear_nav_app(i):
+                def _bajar(event=None):
+                    if i < len(self._entradas_billetes) - 1:
+                        nxt = self._entradas_billetes[i + 1]
+                        nxt.focus_set()
+                        nxt.after(10, lambda: nxt.select_range(0, "end"))
+                        return "break"
+                    return None
+
+                def _subir(event=None):
+                    if i > 0:
+                        prv = self._entradas_billetes[i - 1]
+                        prv.focus_set()
+                        prv.after(10, lambda: prv.select_range(0, "end"))
+                        return "break"
+                    else:
+                        if hasattr(self, "combo_trabajador") and hasattr(self.combo_trabajador, "entry"):
+                            self.combo_trabajador.entry.focus_set()
+                            self.combo_trabajador.entry.after(10, lambda: self.combo_trabajador.entry.select_range(0, "end"))
+                            return "break"
+                    return None
+
+                return _bajar, _subir
+
+            bajar_fn, subir_fn = _crear_nav_app(idx)
+            ent.bind("<Down>", bajar_fn)
+            ent.bind("<Up>", subir_fn)
+            ent.bind("<FocusIn>", lambda e, w=ent: w.after(10, lambda: w.select_range(0, "end")))
 
         # ── TOTALES ──
         totales = ctk.CTkFrame(left, fg_color="#111827", corner_radius=8)

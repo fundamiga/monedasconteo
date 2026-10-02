@@ -287,6 +287,7 @@ class VentanaConteo(ctk.CTkToplevel):
                      text_color="#FBBF24").pack(anchor="w", padx=10, pady=(6, 2))
 
         self.campos_billetes = {}
+        self._entradas_billetes = []
         billetes_def = [
             ("$2.000",    "2000"),
             ("$5.000",    "5000"),
@@ -306,6 +307,7 @@ class VentanaConteo(ctk.CTkToplevel):
                          font=ctk.CTkFont(size=11)).pack(side="left")
             entry.bind("<KeyRelease>", lambda e: self._actualizar_total())
             self.campos_billetes[key] = entry
+            self._entradas_billetes.append(entry)
 
         # Total billetes
         sep2 = ctk.CTkFrame(frame_bil, height=1, fg_color="#374151")
@@ -374,6 +376,49 @@ class VentanaConteo(ctk.CTkToplevel):
             f_dia, text=f"📁 {pestana_ini}",
             text_color="#10B981", font=ctk.CTkFont(size=12, weight="bold"))
         self.lbl_fecha_txt.pack(side="left", padx=8)
+
+        # ── Navegación con flechas (Arriba / Abajo) entre billetes y trabajador ──
+        for idx, ent in enumerate(self._entradas_billetes):
+            def _crear_nav(i):
+                def _bajar(event=None):
+                    if i < len(self._entradas_billetes) - 1:
+                        nxt = self._entradas_billetes[i + 1]
+                        nxt.focus_set()
+                        nxt.after(10, lambda: nxt.select_range(0, "end"))
+                        return "break"
+                    else:
+                        if hasattr(self, "combo_trabajador") and hasattr(self.combo_trabajador, "entry"):
+                            self.combo_trabajador.entry.focus_set()
+                            self.combo_trabajador.entry.after(10, lambda: self.combo_trabajador.entry.select_range(0, "end"))
+                            return "break"
+                    return None
+
+                def _subir(event=None):
+                    if i > 0:
+                        prv = self._entradas_billetes[i - 1]
+                        prv.focus_set()
+                        prv.after(10, lambda: prv.select_range(0, "end"))
+                        return "break"
+                    return None
+
+                return _bajar, _subir
+
+            bajar_fn, subir_fn = _crear_nav(idx)
+            ent.bind("<Down>", bajar_fn)
+            ent.bind("<Up>", subir_fn)
+            ent.bind("<FocusIn>", lambda e, w=ent: w.after(10, lambda: w.select_range(0, "end")))
+
+        # Desde el campo del trabajador, flecha arriba regresa al último billete ($100.000)
+        def _subir_desde_trabajador(event=None):
+            if not (self.combo_trabajador._popup and self.combo_trabajador._popup.winfo_exists()):
+                if self._entradas_billetes:
+                    ultimo = self._entradas_billetes[-1]
+                    ultimo.focus_set()
+                    ultimo.after(10, lambda: ultimo.select_range(0, "end"))
+                    return "break"
+            return None
+
+        self.combo_trabajador.entry.bind("<Up>", _subir_desde_trabajador)
 
         # ── Total turno ──
         frame_total = ctk.CTkFrame(self, fg_color="#064E3B", corner_radius=10)
