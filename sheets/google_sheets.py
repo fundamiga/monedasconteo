@@ -142,50 +142,61 @@ MESES_ABREV = {
     9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic'
 }
 
-def generar_opciones_fechas_combo():
+def generar_opciones_fechas_combo(ahora=None):
     """
-    Genera lista amigable de opciones para el selector de fecha del turno.
-    Incluye siempre los últimos 5 a 7 días hábiles recientes (con días del mes anterior si aplica)
-    y los días del mes actual.
+    Genera lista amigable de opciones para el selector de fecha del turno en orden cronológico estricto.
+    - Si estamos en los primeros 7 días del mes, coloca los últimos 4 días hábiles del mes anterior
+      al principio de la lista (antes del día 1 del mes actual), respetando la secuencia del calendario.
+    - Luego coloca los días del mes actual en orden cronológico (1 al último día).
     """
-    ahora = datetime.now()
+    if ahora is None:
+        ahora = datetime.now()
     from datetime import timedelta
     import calendar
 
     ayer = ahora - timedelta(days=1)
     opciones = []
-    fechas_vistas = set()
 
-    # 1. Ayer (por defecto)
-    txt_ayer = f"{ayer.day}/{ayer.month}/{ayer.year} — Ayer ({ayer.day} {MESES_ABREV[ayer.month]})"
-    opciones.append(txt_ayer)
-    fechas_vistas.add((ayer.day, ayer.month, ayer.year))
+    # 1. Si estamos en los primeros 7 días del mes, agregar los últimos 4 días hábiles del mes anterior ANTES del día 1
+    if ahora.day <= 7:
+        mes_ant = ahora.month - 1 if ahora.month > 1 else 12
+        anio_ant = ahora.year if ahora.month > 1 else ahora.year - 1
+        _, max_dias_ant = calendar.monthrange(anio_ant, mes_ant)
 
-    # 2. Hoy
-    txt_hoy = f"{ahora.day}/{ahora.month}/{ahora.year} — Hoy ({ahora.day} {MESES_ABREV[ahora.month]})"
-    opciones.append(txt_hoy)
-    fechas_vistas.add((ahora.day, ahora.month, ahora.year))
-
-    # 3. Días hábiles anteriores recientes (últimos 7 días para cubrir rezagados del mes anterior o semana previa)
-    for i in range(2, 8):
-        d_pasado = ahora - timedelta(days=i)
-        clave = (d_pasado.day, d_pasado.month, d_pasado.year)
-        if clave not in fechas_vistas:
-            etiqueta = "Mes Anterior" if d_pasado.month != ahora.month else "Día hábil"
-            txt = f"{d_pasado.day}/{d_pasado.month}/{d_pasado.year} — {d_pasado.day} {MESES_ABREV[d_pasado.month]} ({etiqueta})"
+        # Últimos 4 días del mes anterior (ej: 27, 28, 29, 30)
+        dias_anteriores = list(range(max(1, max_dias_ant - 3), max_dias_ant + 1))
+        for d in dias_anteriores:
+            if ayer.day == d and ayer.month == mes_ant and ayer.year == anio_ant:
+                txt = f"{d}/{mes_ant}/{anio_ant} — Ayer ({d} {MESES_ABREV[mes_ant]})"
+            else:
+                txt = f"{d}/{mes_ant}/{anio_ant} — {d} {MESES_ABREV[mes_ant]} (Mes Anterior)"
             opciones.append(txt)
-            fechas_vistas.add(clave)
 
-    # 4. Resto de días del mes actual (1 al último día)
-    _, max_dias = calendar.monthrange(ahora.year, ahora.month)
-    for d in range(1, max_dias + 1):
-        clave = (d, ahora.month, ahora.year)
-        if clave not in fechas_vistas:
+    # 2. Días del mes actual en orden cronológico (1 al último día)
+    _, max_dias_act = calendar.monthrange(ahora.year, ahora.month)
+    for d in range(1, max_dias_act + 1):
+        if d == ayer.day and ahora.month == ayer.month and ahora.year == ayer.year:
+            txt = f"{d}/{ahora.month}/{ahora.year} — Ayer ({d} {MESES_ABREV[ahora.month]})"
+        elif d == ahora.day:
+            txt = f"{d}/{ahora.month}/{ahora.year} — Hoy ({d} {MESES_ABREV[ahora.month]})"
+        else:
             txt = f"{d}/{ahora.month}/{ahora.year} — Día {d} {MESES_ABREV[ahora.month]}"
-            opciones.append(txt)
-            fechas_vistas.add(clave)
+        opciones.append(txt)
 
     return opciones
+
+
+def obtener_opcion_defecto_combo(opciones):
+    """
+    Retorna la opción correspondiente a 'Ayer' (turno por defecto) o 'Hoy' si ayer no está.
+    """
+    for op in opciones:
+        if "Ayer" in op:
+            return op
+    for op in opciones:
+        if "Hoy" in op:
+            return op
+    return opciones[0] if opciones else ""
 
 
 def extraer_fecha_de_opcion(texto):

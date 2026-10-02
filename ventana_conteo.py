@@ -361,16 +361,20 @@ class VentanaConteo(ctk.CTkToplevel):
         f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
         f_dia.grid(row=1, column=3, padx=(4, 10), pady=(0, 5), sticky="ew")
 
-        from sheets.google_sheets import generar_opciones_fechas_combo, extraer_fecha_de_opcion, obtener_nombre_pestana_mes
+        from sheets.google_sheets import (
+            generar_opciones_fechas_combo, extraer_fecha_de_opcion,
+            obtener_nombre_pestana_mes, obtener_opcion_defecto_combo
+        )
         dias_opciones = generar_opciones_fechas_combo()
+        opcion_defecto = obtener_opcion_defecto_combo(dias_opciones)
 
         self.combo_dia = ctk.CTkComboBox(
             f_dia, values=dias_opciones, width=240, height=28,
             command=self._on_cambio_dia)
-        self.combo_dia.set(dias_opciones[0])
+        self.combo_dia.set(opcion_defecto)
         self.combo_dia.pack(side="left")
 
-        fecha_ini = extraer_fecha_de_opcion(dias_opciones[0])
+        fecha_ini = extraer_fecha_de_opcion(opcion_defecto)
         pestana_ini = obtener_nombre_pestana_mes(fecha_ini)
         self.lbl_fecha_txt = ctk.CTkLabel(
             f_dia, text=f"📁 {pestana_ini}",
