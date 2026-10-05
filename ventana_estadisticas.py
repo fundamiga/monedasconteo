@@ -307,57 +307,126 @@ class VentanaEstadisticas(ctk.CTkToplevel):
     def _crear_tab_parqueaderos(self):
         tab = self.tab_parqueaderos
         tab.grid_columnconfigure(0, weight=1)
-        tab.grid_rowconfigure(2, weight=1)
+        tab.grid_rowconfigure(3, weight=1)
 
-        # 1. Barra superior: Título y Botón Sincronizar Nómina Supabase
+        # 1. Barra superior: Selector de Modo, Toggle ARL y Sincronizar Supabase
         f_top = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
         f_top.grid(row=0, column=0, padx=8, pady=(8, 4), sticky="ew")
 
-        ctk.CTkLabel(
+        self.modo_finanzas = ctk.StringVar(value="tiempo_real")
+        self.seg_modo = ctk.CTkSegmentedButton(
             f_top,
-            text="🏢 Balance Financiero: Recaudo en Máquina vs Nómina Pagada (Supabase)",
-            font=ctk.CTkFont(size=12, weight="bold"),
-            text_color="#38BDF8"
-        ).pack(side="left", padx=12, pady=6)
+            values=["⚡ Estimado en Tiempo Real (En Curso)", "💼 Nómina Oficial Liquidada"],
+            variable=self.modo_finanzas,
+            command=self._cambiar_modo_finanzas,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            selected_color="#2563EB",
+            selected_hover_color="#1D4ED8",
+            height=30
+        )
+        self.seg_modo.pack(side="left", padx=10, pady=6)
+
+        self.var_arl = ctk.BooleanVar(value=True)
+        self.chk_arl = ctk.CTkCheckBox(
+            f_top,
+            text="Incluir ARL proporcional ($2.540/turno)",
+            variable=self.var_arl,
+            command=self._on_toggle_arl,
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#38BDF8",
+            fg_color="#0284C7",
+            hover_color="#0369A1"
+        )
+        self.chk_arl.pack(side="left", padx=12, pady=6)
 
         self.btn_sync_nomina = ctk.CTkButton(
             f_top,
-            text="🔄 Sincronizar Nómina (Supabase)",
+            text="🔄 Sincronizar Supabase",
             fg_color="#0284C7", hover_color="#0369A1",
             font=ctk.CTkFont(size=11, weight="bold"),
-            height=28, width=205,
+            height=28, width=175,
             command=self._sincronizar_nomina
         )
         self.btn_sync_nomina.pack(side="right", padx=10, pady=6)
 
+        # Subtítulo informativo / estado de cálculo
+        self.lbl_info_modo = ctk.CTkLabel(
+            tab,
+            text="⚡ Estimación en tiempo real día a día según turnos contados y tarifas de trabajadores en Supabase.",
+            font=ctk.CTkFont(size=11),
+            text_color="#94A3B8"
+        )
+        self.lbl_info_modo.grid(row=1, column=0, padx=12, pady=(0, 4), sticky="w")
+
         # 2. Tarjetas Resumen Financiero del Período
         f_kpi_fin = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
-        f_kpi_fin.grid(row=1, column=0, padx=8, pady=(0, 6), sticky="ew")
+        f_kpi_fin.grid(row=2, column=0, padx=8, pady=(0, 6), sticky="ew")
         for i in range(5):
             f_kpi_fin.grid_columnconfigure(i, weight=1)
 
+        self.lbl_kpi_titulos = []
         def _sub_kpi(col, titulo, valor, color):
             f = ctk.CTkFrame(f_kpi_fin, fg_color="#1E293B", corner_radius=6, border_width=1, border_color="#334155")
             f.grid(row=0, column=col, padx=4, pady=6, sticky="ew")
-            ctk.CTkLabel(f, text=titulo, font=ctk.CTkFont(size=9, weight="bold"), text_color="#94A3B8").pack(anchor="w", padx=8, pady=(4, 1))
+            lbl_t = ctk.CTkLabel(f, text=titulo, font=ctk.CTkFont(size=9, weight="bold"), text_color="#94A3B8")
+            lbl_t.pack(anchor="w", padx=8, pady=(4, 1))
+            self.lbl_kpi_titulos.append(lbl_t)
             lbl = ctk.CTkLabel(f, text=valor, font=ctk.CTkFont(size=13, weight="bold"), text_color=color)
             lbl.pack(anchor="w", padx=8, pady=(0, 4))
             return lbl
 
-        self.lbl_fin_rec = _sub_kpi(0, "🪙 RECAUDO MÁQUINA", "$ 0", "#38BDF8")
-        self.lbl_fin_nom = _sub_kpi(1, "👥 NÓMINA PARQUEADEROS", "$ 0", "#F59E0B")
-        self.lbl_fin_adm = _sub_kpi(2, "🏢 ADMIN / REMESAS", "$ 0", "#A855F7")
-        self.lbl_fin_neto = _sub_kpi(3, "🏆 GANANCIA NETA LIBRE", "$ 0", "#10B981")
-        self.lbl_fin_margen = _sub_kpi(4, "📈 MARGEN LIBRE %", "0%", "#10B981")
+        self.lbl_fin_kpi0 = _sub_kpi(0, "🪙 RECAUDO ACUMULADO", "$ 0", "#38BDF8")
+        self.lbl_fin_kpi1 = _sub_kpi(1, "👥 SUELDOS ESTIMADOS", "$ 0", "#F59E0B")
+        self.lbl_fin_kpi2 = _sub_kpi(2, "🛡️ ARL ESTIMADA", "$ 0", "#A855F7")
+        self.lbl_fin_kpi3 = _sub_kpi(3, "🏆 GANANCIA EN VIVO", "$ 0", "#10B981")
+        self.lbl_fin_kpi4 = _sub_kpi(4, "🔮 PROYECCIÓN CIERRE", "$ 0", "#38BDF8")
 
-        # 3. Tabla Financiera Comparativa (Recaudo vs Nómina)
-        f_tree_p = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
-        f_tree_p.grid(row=2, column=0, padx=8, pady=(0, 8), sticky="nsew")
-        f_tree_p.grid_columnconfigure(0, weight=1)
-        f_tree_p.grid_rowconfigure(0, weight=1)
+        # 3. Contenedor de Tablas Financieras
+        self.f_tree_p = ctk.CTkFrame(tab, fg_color="#0F172A", corner_radius=8)
+        self.f_tree_p.grid(row=3, column=0, padx=8, pady=(0, 8), sticky="nsew")
+        self.f_tree_p.grid_columnconfigure(0, weight=1)
+        self.f_tree_p.grid_rowconfigure(0, weight=1)
 
+        # ── TABLA A: TIEMPO REAL ──
+        cols_tr = ("pos", "parqueadero", "turnos", "recaudo", "sueldos", "arl", "costo_tot", "ganancia", "margen", "proy_15", "proy_30", "estado")
+        self.tree_tr = ttk.Treeview(self.f_tree_p, columns=cols_tr, show="headings", selectmode="none")
+        self.tree_tr.heading("pos", text="#")
+        self.tree_tr.heading("parqueadero", text="Parqueadero")
+        self.tree_tr.heading("turnos", text="Turnos (#)")
+        self.tree_tr.heading("recaudo", text="🪙 Recaudo")
+        self.tree_tr.heading("sueldos", text="Sueldos Est.")
+        self.tree_tr.heading("arl", text="ARL Est.")
+        self.tree_tr.heading("costo_tot", text="Costo Total")
+        self.tree_tr.heading("ganancia", text="Ganancia en Vivo")
+        self.tree_tr.heading("margen", text="Margen %")
+        self.tree_tr.heading("proy_15", text="🔮 Proy. 15d")
+        self.tree_tr.heading("proy_30", text="🔮 Proy. 30d")
+        self.tree_tr.heading("estado", text="Estado")
+
+        self.tree_tr.column("pos", width=32, anchor="center")
+        self.tree_tr.column("parqueadero", width=125, anchor="w")
+        self.tree_tr.column("turnos", width=65, anchor="center")
+        self.tree_tr.column("recaudo", width=95, anchor="e")
+        self.tree_tr.column("sueldos", width=95, anchor="e")
+        self.tree_tr.column("arl", width=75, anchor="e")
+        self.tree_tr.column("costo_tot", width=95, anchor="e")
+        self.tree_tr.column("ganancia", width=115, anchor="e")
+        self.tree_tr.column("margen", width=68, anchor="center")
+        self.tree_tr.column("proy_15", width=105, anchor="e")
+        self.tree_tr.column("proy_30", width=105, anchor="e")
+        self.tree_tr.column("estado", width=100, anchor="center")
+
+        self.tree_tr.tag_configure("ganancia", foreground="#10B981")
+        self.tree_tr.tag_configure("equilibrio", foreground="#F59E0B")
+        self.tree_tr.tag_configure("pérdida", foreground="#EF4444")
+        self.tree_tr.tag_configure("deficit", foreground="#EF4444")
+
+        self.sb_tr = ttk.Scrollbar(self.f_tree_p, orient="vertical", command=self.tree_tr.yview)
+        self.tree_tr.configure(yscrollcommand=self.sb_tr.set)
+
+        # ── TABLA B: NÓMINA OFICIAL LIQUIDADA ──
         cols_p = ("pos", "parqueadero", "turnos", "recaudo", "nomina_q1", "nomina_q2", "nomina_tot", "ganancia", "margen", "estado")
-        self.tree_parq = ttk.Treeview(f_tree_p, columns=cols_p, show="headings", selectmode="none")
+        self.tree_parq = ttk.Treeview(self.f_tree_p, columns=cols_p, show="headings", selectmode="none")
         self.tree_parq.heading("pos", text="#")
         self.tree_parq.heading("parqueadero", text="Parqueadero")
         self.tree_parq.heading("turnos", text="Turnos (#)")
@@ -384,11 +453,12 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         self.tree_parq.tag_configure("equilibrio", foreground="#F59E0B")
         self.tree_parq.tag_configure("deficit", foreground="#EF4444")
 
-        sb_p = ttk.Scrollbar(f_tree_p, orient="vertical", command=self.tree_parq.yview)
-        self.tree_parq.configure(yscrollcommand=sb_p.set)
+        self.sb_oficial = ttk.Scrollbar(self.f_tree_p, orient="vertical", command=self.tree_parq.yview)
+        self.tree_parq.configure(yscrollcommand=self.sb_oficial.set)
 
-        self.tree_parq.grid(row=0, column=0, sticky="nsew")
-        sb_p.grid(row=0, column=1, sticky="ns")
+        # Mostrar por defecto Tabla Tiempo Real
+        self.tree_tr.grid(row=0, column=0, sticky="nsew")
+        self.sb_tr.grid(row=0, column=1, sticky="ns")
 
     # ── CARGA Y RENDERIZADO DE DATOS ──
 
@@ -424,19 +494,17 @@ class VentanaEstadisticas(ctk.CTkToplevel):
 
     def _cargar_datos(self):
         mes, anio, quincena, parq, busqueda = self._obtener_parametros_filtro()
+        incluir_arl = self.var_arl.get() if hasattr(self, "var_arl") else True
         data = obtener_balance_estadisticas(
             mes=mes, anio=anio, quincena=quincena,
-            filtro_trabajador=busqueda, filtro_parqueadero=parq
+            filtro_trabajador=busqueda, filtro_parqueadero=parq,
+            incluir_arl=incluir_arl
         )
         self.datos_actuales = data
         self._actualizar_kpis(data["totales"], data["top_turnos"], data["top_recaudo"])
         self._renderizar_tabla_trabajadores(data["trabajadores"])
         self._renderizar_graficas(data)
-        self._renderizar_tabla_parqueaderos(
-            data.get("balance_financiero", []),
-            data.get("resumen_nomina", {}),
-            data["totales"]["total_recaudo"]
-        )
+        self._renderizar_tabla_parqueaderos(data)
 
     def _actualizar_kpis(self, totales, top_turnos, top_recaudo):
         self.kpi_total.configure(text=fmt_cop(totales["total_recaudo"]))
@@ -549,51 +617,152 @@ class VentanaEstadisticas(ctk.CTkToplevel):
             prog.pack(fill="x", padx=8, pady=(0, 6))
             prog.set(ratio_barra)
 
-    def _renderizar_tabla_parqueaderos(self, balance_fin, res_nom, tot_general):
-        for item in self.tree_parq.get_children():
-            self.tree_parq.delete(item)
+    def _cambiar_modo_finanzas(self, valor=None):
+        modo = self.modo_finanzas.get()
+        if "Tiempo Real" in modo:
+            self.chk_arl.configure(state="normal")
+            self.tree_parq.grid_remove()
+            self.sb_oficial.grid_remove()
+            self.tree_tr.grid(row=0, column=0, sticky="nsew")
+            self.sb_tr.grid(row=0, column=1, sticky="ns")
+        else:
+            self.chk_arl.configure(state="disabled")
+            self.tree_tr.grid_remove()
+            self.sb_tr.grid_remove()
+            self.tree_parq.grid(row=0, column=0, sticky="nsew")
+            self.sb_oficial.grid(row=0, column=1, sticky="ns")
+        if self.datos_actuales:
+            self._renderizar_tabla_parqueaderos(self.datos_actuales)
 
-        if not balance_fin:
-            self.lbl_fin_rec.configure(text="$ 0")
-            self.lbl_fin_nom.configure(text="$ 0")
-            self.lbl_fin_adm.configure(text="$ 0")
-            self.lbl_fin_neto.configure(text="$ 0", text_color="#10B981")
-            self.lbl_fin_margen.configure(text="0%", text_color="#10B981")
+    def _on_toggle_arl(self):
+        self._cargar_datos()
+
+    def _renderizar_tabla_parqueaderos(self, data):
+        if not data:
             return
 
-        for idx, p in enumerate(balance_fin, 1):
-            estado_tag = p.get("estado", "EQUILIBRIO").lower()
-            gn = p.get("ganancia_neta", 0)
-            signo = "+" if gn > 0 else ""
-            ganancia_txt = f"{signo}{fmt_cop(gn)}"
-            
-            self.tree_parq.insert("", "end", values=(
-                idx,
-                p["parqueadero"],
-                f"{p['turnos']} turnos",
-                fmt_cop(p["recaudo"]),
-                fmt_cop(p["nomina_q1"]),
-                fmt_cop(p["nomina_q2"]),
-                fmt_cop(p["nomina_total"]),
-                ganancia_txt,
-                f"{p['margen_pct']}%",
-                f"● {p['estado']}"
-            ), tags=(estado_tag,))
+        modo = self.modo_finanzas.get()
+        es_tr = "Tiempo Real" in modo
 
-        # Actualizar KPIs financieros del tab
-        tot_nom_parq = res_nom.get("total_nomina_parqueaderos", 0)
-        tot_adm = res_nom.get("gastos_admin", 0) + res_nom.get("gastos_remesas", 0)
-        utilidad = res_nom.get("utilidad_neta_fundacion", 0)
-        margen = res_nom.get("margen_fundacion_pct", 0)
+        if es_tr:
+            # ── RENDERIZAR TIEMPO REAL ──
+            tr_data = data.get("estimado_tiempo_real", {})
+            parqs_tr = tr_data.get("por_parqueadero", [])
+            tot_tr = tr_data.get("totales", {})
+            dias_datos = tr_data.get("dias_con_datos", 0)
 
-        self.lbl_fin_rec.configure(text=fmt_cop(tot_general))
-        self.lbl_fin_nom.configure(text=fmt_cop(tot_nom_parq))
-        self.lbl_fin_adm.configure(text=fmt_cop(tot_adm))
+            for item in self.tree_tr.get_children():
+                self.tree_tr.delete(item)
 
-        color_utilidad = "#10B981" if utilidad >= 0 else "#EF4444"
-        signo_u = "+" if utilidad > 0 else ""
-        self.lbl_fin_neto.configure(text=f"{signo_u}{fmt_cop(utilidad)}", text_color=color_utilidad)
-        self.lbl_fin_margen.configure(text=f"{margen}%", text_color=color_utilidad)
+            for idx, p in enumerate(parqs_tr, 1):
+                estado_raw = p.get("estado", "EQUILIBRIO")
+                tag = estado_raw.lower()
+                gn = p.get("ganancia_neta", 0)
+                signo_gn = "+" if gn > 0 else ""
+                p15 = p.get("proy_quincena_15d", 0)
+                signo_15 = "+" if p15 > 0 else ""
+                p30 = p.get("proy_mes_30d", 0)
+                signo_30 = "+" if p30 > 0 else ""
+
+                self.tree_tr.insert("", "end", values=(
+                    idx,
+                    p["parqueadero"],
+                    f"{p['turnos']} turnos",
+                    fmt_cop(p["recaudo"]),
+                    fmt_cop(p["sueldos"]),
+                    fmt_cop(p["arl"]),
+                    fmt_cop(p["costo_total"]),
+                    f"{signo_gn}{fmt_cop(gn)}",
+                    f"{p['margen_pct']}%",
+                    f"{signo_15}{fmt_cop(p15)}",
+                    f"{signo_30}{fmt_cop(p30)}",
+                    f"● {estado_raw}"
+                ), tags=(tag,))
+
+            # KPIs Tiempo Real
+            gn_total = tot_tr.get("ganancia_neta_total", 0)
+            color_gn = "#10B981" if gn_total >= 0 else "#EF4444"
+            signo_tot = "+" if gn_total > 0 else ""
+            m_pct_tot = tot_tr.get("margen_total_pct", 0)
+
+            if len(self.lbl_kpi_titulos) >= 5:
+                self.lbl_kpi_titulos[0].configure(text="🪙 RECAUDO ACUMULADO")
+                self.lbl_kpi_titulos[1].configure(text="👥 SUELDOS ESTIMADOS")
+                self.lbl_kpi_titulos[2].configure(text="🛡️ ARL ESTIMADA")
+                self.lbl_kpi_titulos[3].configure(text="🏆 GANANCIA EN VIVO")
+                self.lbl_kpi_titulos[4].configure(text="🔮 PROYECCIÓN 15D / 30D")
+
+            self.lbl_fin_kpi0.configure(text=fmt_cop(tot_tr.get("total_recaudo", 0)), text_color="#38BDF8")
+            self.lbl_fin_kpi1.configure(text=fmt_cop(tot_tr.get("total_sueldos", 0)), text_color="#F59E0B")
+            self.lbl_fin_kpi2.configure(text=fmt_cop(tot_tr.get("total_arl", 0)), text_color="#A855F7")
+            self.lbl_fin_kpi3.configure(text=f"{signo_tot}{fmt_cop(gn_total)} ({m_pct_tot}%)", text_color=color_gn)
+
+            p15_tot = tot_tr.get("proy_15_total", 0)
+            p30_tot = tot_tr.get("proy_30_total", 0)
+            s15 = "+" if p15_tot > 0 else ""
+            s30 = "+" if p30_tot > 0 else ""
+            self.lbl_fin_kpi4.configure(text=f"Q: {s15}{fmt_cop(p15_tot)} | M: {s30}{fmt_cop(p30_tot)}", text_color=color_gn)
+
+            arl_txt = "con ARL ($2.540/turno)" if tr_data.get("incluir_arl") else "sin ARL (solo sueldos)"
+            self.lbl_info_modo.configure(
+                text=f"⚡ Estimación en tiempo real día a día — {dias_datos} días con turnos contados en el período ({arl_txt})."
+            )
+
+        else:
+            # ── RENDERIZAR NÓMINA OFICIAL (SUPABASE) ──
+            balance_fin = data.get("balance_financiero", [])
+            res_nom = data.get("resumen_nomina", {})
+            tot_general = data.get("totales", {}).get("total_recaudo", 0)
+
+            for item in self.tree_parq.get_children():
+                self.tree_parq.delete(item)
+
+            for idx, p in enumerate(balance_fin, 1):
+                estado_tag = p.get("estado", "EQUILIBRIO").lower()
+                gn = p.get("ganancia_neta", 0)
+                signo = "+" if gn > 0 else ""
+                ganancia_txt = f"{signo}{fmt_cop(gn)}"
+
+                self.tree_parq.insert("", "end", values=(
+                    idx,
+                    p["parqueadero"],
+                    f"{p['turnos']} turnos",
+                    fmt_cop(p["recaudo"]),
+                    fmt_cop(p["nomina_q1"]),
+                    fmt_cop(p["nomina_q2"]),
+                    fmt_cop(p["nomina_total"]),
+                    ganancia_txt,
+                    f"{p['margen_pct']}%",
+                    f"● {p['estado']}"
+                ), tags=(estado_tag,))
+
+            # KPIs Nómina Oficial
+            tot_nom_parq = res_nom.get("total_nomina_parqueaderos", 0)
+            tot_adm = res_nom.get("gastos_admin", 0) + res_nom.get("gastos_remesas", 0)
+            utilidad = res_nom.get("utilidad_neta_fundacion", 0)
+            margen = res_nom.get("margen_fundacion_pct", 0)
+
+            if len(self.lbl_kpi_titulos) >= 5:
+                self.lbl_kpi_titulos[0].configure(text="🪙 RECAUDO MÁQUINA")
+                self.lbl_kpi_titulos[1].configure(text="👥 NÓMINA PARQUEADEROS")
+                self.lbl_kpi_titulos[2].configure(text="🏢 ADMIN / REMESAS")
+                self.lbl_kpi_titulos[3].configure(text="🏆 GANANCIA NETA LIBRE")
+                self.lbl_kpi_titulos[4].configure(text="📈 MARGEN LIBRE %")
+
+            color_utilidad = "#10B981" if utilidad >= 0 else "#EF4444"
+            signo_u = "+" if utilidad > 0 else ""
+
+            self.lbl_fin_kpi0.configure(text=fmt_cop(tot_general), text_color="#38BDF8")
+            self.lbl_fin_kpi1.configure(text=fmt_cop(tot_nom_parq), text_color="#F59E0B")
+            self.lbl_fin_kpi2.configure(text=fmt_cop(tot_adm), text_color="#A855F7")
+            self.lbl_fin_kpi3.configure(text=f"{signo_u}{fmt_cop(utilidad)}", text_color=color_utilidad)
+            self.lbl_fin_kpi4.configure(text=f"{margen}%", text_color=color_utilidad)
+
+            qs = res_nom.get("quincenas_encontradas", [])
+            qs_str = ", ".join(qs) if qs else "Ninguna liquidación oficial encontrada para este período"
+            self.lbl_info_modo.configure(
+                text=f"💼 Cruce oficial contra liquidaciones cerradas en Supabase: {qs_str}"
+            )
 
     def _limpiar_filtros(self):
         self.entry_buscar.delete(0, "end")
@@ -654,25 +823,28 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         threading.Thread(target=_tarea, daemon=True).start()
 
     def _sincronizar_nomina(self):
-        """Descarga en segundo plano las últimas liquidaciones desde Supabase y actualiza la UI."""
+        """Descarga en segundo plano liquidaciones y tarifas de trabajadores desde Supabase."""
         self.btn_sync_nomina.configure(state="disabled", text="⏳ Conectando...")
 
         def _tarea():
-            from nomina_supabase import sincronizar_liquidaciones_supabase
-            total, err = sincronizar_liquidaciones_supabase()
+            from nomina_supabase import sincronizar_liquidaciones_supabase, sincronizar_trabajadores_supabase
+            total_liq, err_liq = sincronizar_liquidaciones_supabase()
+            total_trab, err_trab = sincronizar_trabajadores_supabase()
 
             def _fin():
-                self.btn_sync_nomina.configure(state="normal", text="🔄 Sincronizar Nómina (Supabase)")
-                if err:
+                self.btn_sync_nomina.configure(state="normal", text="🔄 Sincronizar Supabase")
+                if err_liq and err_trab:
                     messagebox.showerror(
-                        "Error al Sincronizar Nómina",
-                        f"No se pudo conectar a Supabase:\n{err}",
+                        "Error al Sincronizar Supabase",
+                        f"No se pudo conectar a Supabase:\n{err_liq}",
                         parent=self
                     )
                 else:
                     messagebox.showinfo(
-                        "Nómina Sincronizada",
-                        f"✅ Se sincronizaron {total} liquidaciones desde Supabase.\nLos balances de rentabilidad están actualizados.",
+                        "Sincronización Exitosa",
+                        f"✅ Datos sincronizados desde Supabase:\n\n"
+                        f"• {total_trab} trabajadores y tarifas para tiempo real.\n"
+                        f"• {total_liq} liquidaciones oficiales de nómina.",
                         parent=self
                     )
                     self._cargar_datos()
@@ -680,3 +852,128 @@ class VentanaEstadisticas(ctk.CTkToplevel):
             self.after(0, _fin)
 
         threading.Thread(target=_tarea, daemon=True).start()
+
+
+# ── DIÁLOGO DE SEGURIDAD PARA ACCESO A BALANCES ─────────────────────────────
+
+class DialogoContrasenaBalances(ctk.CTkToplevel):
+    """
+    Modal de seguridad que solicita la contraseña de administrador
+    para acceder a la información de balances, rentabilidad y nómina.
+    """
+    CLAVE_CORRECTA = "fundamiga2026EM"
+
+    def __init__(self, parent, callback_exito=None):
+        super().__init__(parent)
+        self.callback_exito = callback_exito
+        self.title("Acceso Protegido — Balances")
+        self.geometry("420x260")
+        self.resizable(False, False)
+        self.configure(fg_color="#0F172A")
+
+        self.transient(parent)
+        self.grab_set()
+
+        # Centrar en relación a la ventana principal
+        try:
+            x = parent.winfo_x() + (parent.winfo_width() - 420) // 2
+            y = parent.winfo_y() + (parent.winfo_height() - 260) // 2
+            self.geometry(f"420x260+{max(0, x)}+{max(0, y)}")
+        except Exception:
+            pass
+
+        # Icono y encabezado
+        lbl_icono = ctk.CTkLabel(
+            self, text="🔒",
+            font=ctk.CTkFont(size=36)
+        )
+        lbl_icono.pack(pady=(16, 2))
+
+        lbl_titulo = ctk.CTkLabel(
+            self, text="Balances y Rentabilidad Financiera",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#F8FAFC"
+        )
+        lbl_titulo.pack(pady=(0, 2))
+
+        lbl_sub = ctk.CTkLabel(
+            self, text="Ingresa la contraseña de administrador para ver las ganancias:",
+            font=ctk.CTkFont(size=11),
+            text_color="#94A3B8"
+        )
+        lbl_sub.pack(pady=(0, 8))
+
+        # Campo contraseña
+        f_pass = ctk.CTkFrame(self, fg_color="transparent")
+        f_pass.pack(pady=4)
+
+        self.entry_pass = ctk.CTkEntry(
+            f_pass,
+            show="*",
+            width=240,
+            height=34,
+            font=ctk.CTkFont(size=13),
+            placeholder_text="Contraseña autorizada"
+        )
+        self.entry_pass.pack(side="left", padx=(0, 6))
+        self.entry_pass.focus()
+
+        self.btn_ver = ctk.CTkButton(
+            f_pass, text="👁", width=36, height=34,
+            fg_color="#334155", hover_color="#475569",
+            command=self._toggle_ver
+        )
+        self.btn_ver.pack(side="left")
+
+        # Label error
+        self.lbl_error = ctk.CTkLabel(
+            self, text="",
+            font=ctk.CTkFont(size=11, weight="bold"),
+            text_color="#EF4444"
+        )
+        self.lbl_error.pack(pady=(4, 6))
+
+        # Botones de acción
+        f_btns = ctk.CTkFrame(self, fg_color="transparent")
+        f_btns.pack(pady=(2, 10))
+
+        btn_cancelar = ctk.CTkButton(
+            f_btns, text="Cancelar",
+            fg_color="#334155", hover_color="#475569",
+            width=110, height=32,
+            command=self.destroy
+        )
+        btn_cancelar.pack(side="left", padx=6)
+
+        btn_entrar = ctk.CTkButton(
+            f_btns, text="Acceder ➜",
+            fg_color="#2563EB", hover_color="#1D4ED8",
+            width=130, height=32,
+            font=ctk.CTkFont(weight="bold"),
+            command=self._verificar
+        )
+        btn_entrar.pack(side="left", padx=6)
+
+        # Atajos de teclado
+        self.bind("<Return>", lambda e: self._verificar())
+        self.bind("<Escape>", lambda e: self.destroy())
+
+    def _toggle_ver(self):
+        if self.entry_pass.cget("show") == "*":
+            self.entry_pass.configure(show="")
+            self.btn_ver.configure(text="🔒")
+        else:
+            self.entry_pass.configure(show="*")
+            self.btn_ver.configure(text="👁")
+
+    def _verificar(self):
+        pwd = self.entry_pass.get()
+        if pwd == self.CLAVE_CORRECTA:
+            self.destroy()
+            if self.callback_exito:
+                self.callback_exito()
+        else:
+            self.lbl_error.configure(text="❌ Contraseña incorrecta. Acceso denegado.")
+            self.entry_pass.delete(0, "end")
+            self.entry_pass.focus()
+

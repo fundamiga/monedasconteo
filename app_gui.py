@@ -25,7 +25,7 @@ from ventana_conteo import VentanaConteo
 from vista_tabla import VentanaTablaExcel
 from modo_camara import VentanaCamaraOCR
 from ventana_historial import VentanaHistorial
-from ventana_estadisticas import VentanaEstadisticas
+from ventana_estadisticas import VentanaEstadisticas, DialogoContrasenaBalances
 from actualizador import verificar_actualizacion
 
 ctk.set_appearance_mode("Dark")
@@ -374,11 +374,14 @@ class AppCC358(ctk.CTk):
         v.focus()
 
     def _abrir_estadisticas(self):
-        """Abre la ventana de Balances, Nómina y Estadísticas."""
-        self._log("Abriendo Balances y Estadísticas de Recaudo...")
-        v = VentanaEstadisticas(self)
-        v.lift()
-        v.focus()
+        """Abre la ventana de Balances, Nómina y Estadísticas previa validación de contraseña."""
+        def _autorizado():
+            self._log("Acceso autorizado a Balances y Estadísticas.")
+            v = VentanaEstadisticas(self)
+            v.lift()
+            v.focus()
+
+        DialogoContrasenaBalances(self, callback_exito=_autorizado)
 
     def _abrir_modo_tabla(self):
         """Abre la ventana interactiva del Modo Tabla Excel."""

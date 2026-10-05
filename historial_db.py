@@ -144,7 +144,7 @@ def exportar_csv(ruta_archivo, filtro_trabajador="", filtro_fecha=""):
     return len(registros)
 
 
-def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tipo="todas", filtro_trabajador="", filtro_parqueadero=""):
+def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tipo="todas", filtro_trabajador="", filtro_parqueadero="", incluir_arl=True):
     """
     Calcula estadísticas, balances y conteo de apariciones por persona en un período.
     
@@ -155,6 +155,7 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
       - hoja_tipo: 'todas', 'principal' o 'pruebas'.
       - filtro_trabajador: Texto para filtrar nombre de persona.
       - filtro_parqueadero: Nombre de parqueadero o '' para todos.
+      - incluir_arl: Booleano para incluir el valor proporcional diario de ARL ($2.540/turno).
     """
     init_db()
     with _conectar() as conn:
@@ -348,6 +349,28 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
     utilidad_neta_fundacion = tot_general - total_nomina_general
     margen_fundacion_pct = round((utilidad_neta_fundacion / tot_general) * 100, 1) if tot_general > 0 else 0
 
+    # ── Estimado en Tiempo Real (Día a Día / En Curso) ──
+    try:
+        from nomina_supabase import calcular_estimado_tiempo_real
+        estimado_tr = calcular_estimado_tiempo_real(filtrados, incluir_arl=incluir_arl)
+    except Exception as e:
+        estimado_tr = {
+            "por_parqueadero": [],
+            "totales": {
+                "total_recaudo": tot_general,
+                "total_sueldos": 0,
+                "total_arl": 0,
+                "total_costo": 0,
+                "ganancia_neta_total": 0,
+                "margen_total_pct": 0.0,
+                "proy_15_total": 0,
+                "proy_30_total": 0
+            },
+            "dias_con_datos": 0,
+            "incluir_arl": incluir_arl,
+            "error": str(e)
+        }
+
     return {
         "totales": {
             "total_recaudo": tot_general,
@@ -364,6 +387,7 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
         "parqueaderos": lista_parqueaderos,
         "total_registros": len(filtrados),
         "balance_financiero": balance_financiero,
+        "estimado_tiempo_real": estimado_tr,
         "resumen_nomina": {
             "total_nomina_parqueaderos": tot_nomina_parq,
             "gastos_admin": gastos_admin,
