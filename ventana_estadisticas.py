@@ -128,16 +128,27 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         # Filtro Parqueadero
         ctk.CTkLabel(f_filtros, text="Parqueadero:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#94A3B8").pack(side="left", padx=(0, 4))
         self.combo_parqueadero = ctk.CTkComboBox(
-            f_filtros, values=["TODOS"] + PARQUEADEROS, width=130, height=28,
+            f_filtros, values=["TODOS"] + PARQUEADEROS, width=125, height=28,
             command=lambda v: self._cargar_datos()
         )
         self.combo_parqueadero.set("TODOS")
         self.combo_parqueadero.pack(side="left", padx=(0, 10))
 
+        # Filtro Máquina
+        ctk.CTkLabel(f_filtros, text="Máquina:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#94A3B8").pack(side="left", padx=(0, 4))
+        self.combo_maquina = ctk.CTkComboBox(
+            f_filtros,
+            values=["Todas", "Máquina 1 (CC358)", "Máquina 2 (Drive)"],
+            width=150, height=28,
+            command=lambda v: self._cargar_datos()
+        )
+        self.combo_maquina.set("Todas")
+        self.combo_maquina.pack(side="left", padx=(0, 10))
+
         # Buscador en vivo de trabajador
         ctk.CTkLabel(f_filtros, text="Buscar:", font=ctk.CTkFont(size=12, weight="bold"), text_color="#94A3B8").pack(side="left", padx=(0, 4))
         self.entry_buscar = ctk.CTkEntry(
-            f_filtros, placeholder_text="Nombre de persona...", width=160, height=28
+            f_filtros, placeholder_text="Nombre de persona...", width=140, height=28
         )
         self.entry_buscar.pack(side="left", padx=(0, 8))
         self.entry_buscar.bind("<KeyRelease>", lambda e: self._cargar_datos())
@@ -490,14 +501,24 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         parq = self.combo_parqueadero.get()
         busqueda = self.entry_buscar.get().strip()
 
-        return mes, anio, quincena, parq, busqueda
+        # 4. Máquina
+        maq_sel = self.combo_maquina.get() if hasattr(self, "combo_maquina") else "Todas"
+        if "Máquina 1" in maq_sel:
+            filtro_maq = "MAQUINA 1"
+        elif "Máquina 2" in maq_sel:
+            filtro_maq = "MAQUINA 2"
+        else:
+            filtro_maq = "TODAS"
+
+        return mes, anio, quincena, parq, busqueda, filtro_maq
 
     def _cargar_datos(self):
-        mes, anio, quincena, parq, busqueda = self._obtener_parametros_filtro()
+        mes, anio, quincena, parq, busqueda, filtro_maq = self._obtener_parametros_filtro()
         incluir_arl = self.var_arl.get() if hasattr(self, "var_arl") else True
         data = obtener_balance_estadisticas(
             mes=mes, anio=anio, quincena=quincena,
             filtro_trabajador=busqueda, filtro_parqueadero=parq,
+            filtro_maquina=filtro_maq,
             incluir_arl=incluir_arl
         )
         self.datos_actuales = data
@@ -510,7 +531,13 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         self.kpi_total.configure(text=fmt_cop(totales["total_recaudo"]))
         self.kpi_monedas.configure(text=f"{fmt_cop(totales['total_monedas'])} ({totales['pct_monedas']}%)")
         self.kpi_billetes.configure(text=f"{fmt_cop(totales['total_billetes'])} ({totales['pct_billetes']}%)")
-        self.kpi_turnos.configure(text=f"{totales['total_turnos']} turnos ({totales['trabajadores_activos']} pers.)")
+
+        m1_cnt = totales.get("turnos_m1", 0)
+        m2_cnt = totales.get("turnos_m2", 0)
+        if m1_cnt > 0 and m2_cnt > 0:
+            self.kpi_turnos.configure(text=f"{totales['total_turnos']} t. (🪙{m1_cnt} | ✍️{m2_cnt})")
+        else:
+            self.kpi_turnos.configure(text=f"{totales['total_turnos']} turnos ({totales['trabajadores_activos']} pers.)")
 
         if top_recaudo:
             nom_corto = top_recaudo['trabajador'][:14]
@@ -767,6 +794,8 @@ class VentanaEstadisticas(ctk.CTkToplevel):
     def _limpiar_filtros(self):
         self.entry_buscar.delete(0, "end")
         self.combo_parqueadero.set("TODOS")
+        if hasattr(self, "combo_maquina"):
+            self.combo_maquina.set("Todas")
         self._cargar_datos()
 
     def _exportar_balance(self):
@@ -802,19 +831,31 @@ class VentanaEstadisticas(ctk.CTkToplevel):
         self.btn_sync.configure(state="disabled", text="⏳ Sincronizando...")
 
         def _tarea():
-            importados, msg = sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre=txt_mes)
+            res = sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre=txt_mes)
+            if isinstance(res, dict):
+                importados = res.get("nuevos", 0)
+                existentes = res.get("existentes", 0)
+                total_leidos = res.get("total_leidos", 0)
+            else:
+                importados, _ = res
+                existentes = 0
+                total_leidos = importados
+
             def _fin():
                 self.btn_sync.configure(state="normal", text="🔄 Sincronizar desde Sheets")
                 if importados > 0:
                     messagebox.showinfo(
                         "Sincronización Completa",
-                        f"✅ Se importaron {importados} turnos desde Google Sheets ({txt_mes}) a la base de datos local.",
+                        f"✅ Sincronización completada ({txt_mes}):\n\n"
+                        f"• {importados} nuevos turnos de Máquina 2 agregados\n"
+                        f"• {existentes} turnos ya estaban registrados\n"
+                        f"• {total_leidos} conteos totales leídos en Google Drive.",
                         parent=self
                     )
                 else:
                     messagebox.showinfo(
                         "Sincronización Completa",
-                        f"Todos los turnos de {txt_mes} ya estaban sincronizados en el historial.",
+                        f"Todos los {total_leidos} turnos de {txt_mes} ya estaban sincronizados en el historial.",
                         parent=self
                     )
                 self._cargar_datos()

@@ -50,8 +50,15 @@ def init_db():
         except Exception:
             pass
 
+        # Migración automática: Columna 'maquina' para diferenciar Máquina 1 (CC358 Serial) y Máquina 2 (Manual Drive)
+        try:
+            conn.execute("ALTER TABLE conteos ADD COLUMN maquina TEXT NOT NULL DEFAULT 'MAQUINA 1'")
+        except Exception:
+            pass
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maquina ON conteos(maquina)")
 
-def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, hoja_tipo="principal"):
+
+def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, hoja_tipo="principal", maquina="MAQUINA 1"):
     """Guarda un conteo en la base de datos local permanente."""
     try:
         init_db()
@@ -77,8 +84,8 @@ def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, h
                 INSERT INTO conteos (
                     timestamp, fecha_turno, parqueadero, trabajador,
                     hoja_tipo, monedas_json, billetes_json,
-                    total_monedas, total_billetes, total_turno
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    total_monedas, total_billetes, total_turno, maquina
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 timestamp,
                 str(fecha_turno).strip(),
@@ -87,7 +94,8 @@ def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, h
                 str(hoja_tipo).lower(),
                 json.dumps(monedas or {}),
                 json.dumps(billetes or {}),
-                tm, tb, tt
+                tm, tb, tt,
+                str(maquina).strip().upper()
             ))
         return True
     except Exception as e:
@@ -95,8 +103,8 @@ def guardar_historial(fecha_turno, parqueadero, trabajador, monedas, billetes, h
         return False
 
 
-def consultar_historial(filtro_trabajador="", filtro_fecha="", filtro_parqueadero="", limite=150):
-    """Retorna los registros del historial ordenados del más reciente al más antiguo."""
+def consultar_historial(filtro_trabajador="", filtro_fecha="", filtro_parqueadero="", filtro_maquina="TODAS", limite=250):
+    """Retorna los registros del historial ordenados del más reciente al más antiguo con filtro por máquina."""
     init_db()
     query = "SELECT * FROM conteos WHERE 1=1"
     params = []
@@ -114,6 +122,13 @@ def consultar_historial(filtro_trabajador="", filtro_fecha="", filtro_parqueader
         query += " AND parqueadero LIKE ?"
         params.append(f"%{filtro_parqueadero.strip()}%")
 
+    # Filtro por Máquina
+    maq_f = str(filtro_maquina).strip().upper()
+    if "MAQUINA 1" in maq_f:
+        query += " AND (maquina = 'MAQUINA 1' OR maquina IS NULL OR maquina = '')"
+    elif "MAQUINA 2" in maq_f:
+        query += " AND maquina = 'MAQUINA 2'"
+
     query += " ORDER BY id DESC LIMIT ?"
     params.append(limite)
 
@@ -123,28 +138,28 @@ def consultar_historial(filtro_trabajador="", filtro_fecha="", filtro_parqueader
         return [dict(r) for r in rows]
 
 
-def exportar_csv(ruta_archivo, filtro_trabajador="", filtro_fecha=""):
+def exportar_csv(ruta_archivo, filtro_trabajador="", filtro_fecha="", filtro_parqueadero="", filtro_maquina="TODAS"):
     """Exporta los registros del historial a un archivo CSV."""
     import csv
-    registros = consultar_historial(filtro_trabajador, filtro_fecha, limite=10000)
+    registros = consultar_historial(filtro_trabajador, filtro_fecha, filtro_parqueadero=filtro_parqueadero, filtro_maquina=filtro_maquina, limite=10000)
     with open(ruta_archivo, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.writer(f)
         writer.writerow([
             "ID", "Fecha/Hora Registro", "Fecha Turno", "Parqueadero",
-            "Trabajador", "Hoja", "Total Monedas", "Total Billetes", "Total Turno",
+            "Trabajador", "Máquina / Origen", "Hoja", "Total Monedas", "Total Billetes", "Total Turno",
             "Monedas ($1000,$500,$200,$100,$50)", "Billetes"
         ])
         for r in registros:
             writer.writerow([
                 r["id"], r["timestamp"], r["fecha_turno"], r["parqueadero"],
-                r["trabajador"], r["hoja_tipo"], r["total_monedas"],
+                r["trabajador"], r.get("maquina", "MAQUINA 1"), r["hoja_tipo"], r["total_monedas"],
                 r["total_billetes"], r["total_turno"],
                 r["monedas_json"], r["billetes_json"]
             ])
     return len(registros)
 
 
-def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tipo="todas", filtro_trabajador="", filtro_parqueadero="", incluir_arl=True):
+def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tipo="todas", filtro_trabajador="", filtro_parqueadero="", filtro_maquina="TODAS", incluir_arl=True):
     """
     Calcula estadísticas, balances y conteo de apariciones por persona en un período.
     
@@ -155,6 +170,7 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
       - hoja_tipo: 'todas', 'principal' o 'pruebas'.
       - filtro_trabajador: Texto para filtrar nombre de persona.
       - filtro_parqueadero: Nombre de parqueadero o '' para todos.
+      - filtro_maquina: 'TODAS', 'MAQUINA 1' o 'MAQUINA 2'.
       - incluir_arl: Booleano para incluir el valor proporcional diario de ARL ($2.540/turno).
     """
     init_db()
@@ -168,6 +184,14 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
         # Filtro hoja
         if hoja_tipo != "todas" and r.get("hoja_tipo", "").lower() != hoja_tipo.lower():
             continue
+
+        # Filtro máquina
+        maq_r = str(r.get("maquina") or "MAQUINA 1").strip().upper()
+        if filtro_maquina and filtro_maquina.upper() != "TODAS":
+            if "MAQUINA 1" in filtro_maquina.upper() and maq_r != "MAQUINA 1":
+                continue
+            elif "MAQUINA 2" in filtro_maquina.upper() and maq_r != "MAQUINA 2":
+                continue
 
         # Filtro parqueadero
         if filtro_parqueadero and filtro_parqueadero != "TODOS":
@@ -213,6 +237,10 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
     tot_general = 0
     tot_monedas = 0
     tot_billetes = 0
+    tot_m1 = 0
+    tot_m2 = 0
+    turnos_m1 = 0
+    turnos_m2 = 0
 
     for r in filtrados:
         t_nom = r.get("trabajador", "DESCONOCIDO").strip().upper()
@@ -224,6 +252,14 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
         tot_general += t_tur
         tot_monedas += t_mon
         tot_billetes += t_bil
+
+        m_tipo = str(r.get("maquina") or "MAQUINA 1").strip().upper()
+        if m_tipo == "MAQUINA 2":
+            tot_m2 += t_tur
+            turnos_m2 += 1
+        else:
+            tot_m1 += t_tur
+            turnos_m1 += 1
 
         # Agrupación trabajador
         if t_nom not in trabajadores_map:
@@ -379,7 +415,11 @@ def obtener_balance_estadisticas(mes=None, anio=None, quincena="todos", hoja_tip
             "total_turnos": len(filtrados),
             "pct_monedas": pct_monedas,
             "pct_billetes": pct_billetes,
-            "trabajadores_activos": len(lista_trabajadores)
+            "trabajadores_activos": len(lista_trabajadores),
+            "recaudo_m1": tot_m1,
+            "recaudo_m2": tot_m2,
+            "turnos_m1": turnos_m1,
+            "turnos_m2": turnos_m2
         },
         "top_turnos": top_turnos,
         "top_recaudo": top_recaudo,
@@ -467,11 +507,18 @@ def exportar_reporte_balance_csv(ruta_archivo, balance_data, periodo_texto=""):
     return len(balance_data["trabajadores"])
 
 
-def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
+def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre=None, maquina_destino="MAQUINA 2"):
     """
     Lee todas las filas registradas en una pestaña de Google Sheets y las
-    agrega a la base de datos local si no existían, para tener estadísticas completas.
+    agrega a la base de datos local si no existían (asignándolas a 'MAQUINA 2').
     """
+    if not mes_nombre:
+        try:
+            from sheets.google_sheets import obtener_nombre_pestana_mes
+            mes_nombre = obtener_nombre_pestana_mes()
+        except Exception:
+            mes_nombre = "OCTUBRE 2026"
+
     try:
         from sheets.google_sheets import conectar_sheet, normalizar
         ws = conectar_sheet(hoja_tipo, nombre_pestana=mes_nombre)
@@ -499,6 +546,8 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
     fecha_actual = ""
     parqueadero_actual = ""
     importados = 0
+    total_con_datos = 0
+    ya_existentes = 0
 
     init_db()
     with _conectar() as conn:
@@ -513,7 +562,7 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
                 partes_f = txt_a.split('/')
                 dia_f = partes_f[0].strip()
                 anio_f = partes_f[2].strip() if len(partes_f) > 2 else '2026'
-                mes_f = mes_num_real if mes_num_real else (partes_f[1].strip() if len(partes_f) > 1 else '9')
+                mes_f = mes_num_real if mes_num_real else (partes_f[1].strip() if len(partes_f) > 1 else '10')
                 fecha_actual = f"{dia_f}/{mes_f}/{anio_f}"
                 parqueadero_actual = ""
                 continue
@@ -528,6 +577,7 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
                 # Comprobar si tiene conteo en columna S (índice 18) o total monedas/billetes
                 total_turno_str = r[18].replace("$", "").replace(".", "").replace(",", "").strip() if len(r) > 18 else ""
                 if total_turno_str.isdigit() and int(total_turno_str) > 0:
+                    total_con_datos += 1
                     tt = int(total_turno_str)
                     tm_str = r[10].replace("$", "").replace(".", "").replace(",", "").strip() if len(r) > 10 else "0"
                     tb_str = r[17].replace("$", "").replace(".", "").replace(",", "").strip() if len(r) > 17 else "0"
@@ -541,7 +591,9 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
                         SELECT id FROM conteos 
                         WHERE fecha_turno = ? AND parqueadero = ? AND trabajador = ? AND total_turno = ?
                     """, (fecha_actual, parqueadero_actual, trabajador, tt))
-                    if not cur.fetchone():
+                    if cur.fetchone():
+                        ya_existentes += 1
+                    else:
                         # Monedas
                         monedas = {
                             "1000": int(r[2]) if len(r) > 2 and r[2].isdigit() else 0,
@@ -566,8 +618,8 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
                             INSERT INTO conteos (
                                 timestamp, fecha_turno, parqueadero, trabajador,
                                 hoja_tipo, monedas_json, billetes_json,
-                                total_monedas, total_billetes, total_turno
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                total_monedas, total_billetes, total_turno, maquina
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (
                             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             fecha_actual,
@@ -576,9 +628,15 @@ def sincronizar_desde_sheets(hoja_tipo="principal", mes_nombre="OCTUBRE 2026"):
                             hoja_tipo,
                             json.dumps(monedas),
                             json.dumps(billetes),
-                            tm, tb, tt
+                            tm, tb, tt,
+                            str(maquina_destino).strip().upper()
                         ))
                         importados += 1
 
-    return importados, "OK"
+    return {
+        "nuevos": importados,
+        "existentes": ya_existentes,
+        "total_leidos": total_con_datos,
+        "pestana": mes_nombre
+    }
 
