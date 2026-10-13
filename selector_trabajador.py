@@ -106,6 +106,18 @@ class SelectorTrabajador(ctk.CTkFrame):
         # Iniciar vacío para obligar al usuario a elegir trabajador
         self._actualizar_badge("")
 
+    def set_tamano_grande(self, es_grande: bool):
+        """Ajusta las dimensiones y fuentes para ventana completa o reducida."""
+        self._es_grande = es_grande
+        if es_grande:
+            self.lbl_badge.configure(width=42, height=42, font=ctk.CTkFont(size=18, weight="bold"))
+            self.entry.configure(height=38, font=ctk.CTkFont(size=14))
+            self.btn_desplegar.configure(width=38, height=38, font=ctk.CTkFont(size=12, weight="bold"))
+        else:
+            self.lbl_badge.configure(width=32, height=32, font=ctk.CTkFont(size=14, weight="bold"))
+            self.entry.configure(height=32, font=ctk.CTkFont(size=12))
+            self.btn_desplegar.configure(width=30, height=32, font=ctk.CTkFont(size=10, weight="bold"))
+
     def get(self):
         """Retorna el trabajador seleccionado actualmente."""
         return self.entry.get().strip()
@@ -142,7 +154,10 @@ class SelectorTrabajador(ctk.CTkFrame):
 
     def _on_focus_in(self, event):
         # Al enfocar el campo, seleccionar el texto para facilitar reemplazo
-        self.entry.selection_range(0, "end")
+        try:
+            self.entry.select_range(0, "end")
+        except Exception:
+            pass
 
     def _on_key_release(self, event):
         if event.keysym in ("Down", "Up", "Return", "Escape", "Tab"):
@@ -203,7 +218,8 @@ class SelectorTrabajador(ctk.CTkFrame):
             x = 200
             y = 200
             w = 320
-        h = 250
+        es_g = getattr(self, "_es_grande", False)
+        h = 320 if es_g else 250
 
         self._popup = tk.Toplevel(self)
         self._popup.wm_overrideredirect(True)
@@ -219,8 +235,9 @@ class SelectorTrabajador(ctk.CTkFrame):
         f_letras = tk.Frame(frame_box, bg="#1E293B")
         f_letras.pack(fill="x", padx=4, pady=3)
 
+        fnt_letra = ("Arial", 8, "bold") if es_g else ("Arial", 7, "bold")
         btn_todos = tk.Button(
-            f_letras, text="TODOS", font=("Arial", 7, "bold"),
+            f_letras, text="TODOS", font=fnt_letra,
             bg="#2563EB", fg="white", bd=0, padx=4, pady=2,
             cursor="hand2", command=lambda: self._click_letra("")
         )
@@ -229,7 +246,7 @@ class SelectorTrabajador(ctk.CTkFrame):
         letras = sorted(list(set(t[0].upper() for t in self.lista if t)))
         for l in letras[:14]:
             b = tk.Button(
-                f_letras, text=l, font=("Arial", 7, "bold"),
+                f_letras, text=l, font=fnt_letra,
                 bg="#334155", fg="#E2E8F0", bd=0, padx=3, pady=2,
                 cursor="hand2", command=lambda let=l: self._click_letra(let)
             )
@@ -237,7 +254,7 @@ class SelectorTrabajador(ctk.CTkFrame):
 
         # Label contador
         self._lbl_count = tk.Label(
-            frame_box, text="", font=("Arial", 8),
+            frame_box, text="", font=("Arial", 9 if es_g else 8),
             bg="#0F172A", fg="#94A3B8", anchor="w"
         )
         self._lbl_count.pack(fill="x", padx=8, pady=(0, 2))
@@ -255,7 +272,7 @@ class SelectorTrabajador(ctk.CTkFrame):
             fg="#F8FAFC",
             selectbackground="#2563EB",
             selectforeground="#FFFFFF",
-            font=("Arial", 10),
+            font=("Arial", 12 if es_g else 10),
             bd=0,
             highlightthickness=0,
             yscrollcommand=scrollbar.set

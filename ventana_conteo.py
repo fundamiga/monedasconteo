@@ -85,6 +85,7 @@ class VentanaConteo(ctk.CTkToplevel):
         self.resizable(True, True)
         self.attributes("-topmost", True)  # Siempre encima
         self.minsize(640, 500)
+        self._es_modo_grande = False
 
         # Construir UI primero para medir el tamaño real
         self._crear_ui()
@@ -96,6 +97,9 @@ class VentanaConteo(ctk.CTkToplevel):
         x = mon['left'] + max(10, (mon['width'] - self.ancho) // 2)
         y = mon['top'] + 20
         self.geometry(f"{self.ancho}x{alto_real}+{x}+{y}")
+
+        # Escuchar cambios de tamaño y maximizado
+        self.bind("<Configure>", self._on_configure)
 
         # Enfocar primer campo de billetes o trabajador
         self.after(200, self._enfocar_primer_campo)
@@ -142,11 +146,11 @@ class VentanaConteo(ctk.CTkToplevel):
         tiene_monedas = any(v > 0 for v in self.monedas.values())
 
         # ── Título y botón de cambio de monitor ──
-        f_top = ctk.CTkFrame(self, fg_color="transparent")
-        f_top.grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 4), sticky="ew")
+        self.f_top = ctk.CTkFrame(self, fg_color="transparent")
+        self.f_top.grid(row=0, column=0, columnspan=2, padx=10, pady=(8, 4), sticky="ew")
 
         self.lbl_titulo = ctk.CTkLabel(
-            f_top, 
+            self.f_top, 
             text="✅ ¡Monedas Recibidas de la Máquina!" if tiene_monedas else "⚡ Adelantar Conteo (Escribe datos mientras cuenta)",
             font=ctk.CTkFont(size=15, weight="bold"),
             text_color="#34D399" if tiene_monedas else "#FBBF24")
@@ -154,7 +158,7 @@ class VentanaConteo(ctk.CTkToplevel):
 
         if len(self.monitores) > 1:
             self.btn_monitor = ctk.CTkButton(
-                f_top,
+                self.f_top,
                 text=f"🖥️ Pantalla {self.monitor_actual + 1}",
                 fg_color="#1E3A8A", hover_color="#1D4ED8",
                 font=ctk.CTkFont(size=11, weight="bold"),
@@ -165,7 +169,7 @@ class VentanaConteo(ctk.CTkToplevel):
 
         # Botón discreto HISTORIAL en la ventana rápida
         self.btn_historial_rapido = ctk.CTkButton(
-            f_top,
+            self.f_top,
             text="📜 Historial",
             fg_color="#4C1D95", hover_color="#5B21B6", text_color="#DDD6FE",
             font=ctk.CTkFont(size=11, weight="bold"),
@@ -184,15 +188,16 @@ class VentanaConteo(ctk.CTkToplevel):
         )
         self.frame_mon.grid(row=1, column=0, padx=(10, 5), pady=3, sticky="nsew")
 
-        f_header_mon = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
-        f_header_mon.pack(fill="x", padx=10, pady=(6, 2))
-        ctk.CTkLabel(f_header_mon, text="MONEDAS (automático)",
+        self.f_header_mon = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
+        self.f_header_mon.pack(fill="x", padx=10, pady=(6, 2))
+        self.lbl_monedas_header = ctk.CTkLabel(self.f_header_mon, text="MONEDAS (automático)",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color="#34D399" if tiene_monedas else "#60A5FA").pack(side="left")
+                     text_color="#34D399" if tiene_monedas else "#60A5FA")
+        self.lbl_monedas_header.pack(side="left")
 
         # Botón DISCRETO RECUPERAR ANTERIOR — esquina superior del panel de monedas
         self.btn_recuperar = ctk.CTkButton(
-            f_header_mon, text="↩️ Recuperar",
+            self.f_header_mon, text="↩️ Recuperar",
             fg_color="#78350F", hover_color="#92400E", text_color="#FDE68A",
             font=ctk.CTkFont(size=10),
             width=90, height=22,
@@ -200,7 +205,7 @@ class VentanaConteo(ctk.CTkToplevel):
         self.btn_recuperar.pack(side="left", padx=8)
 
         self.lbl_espera_print = ctk.CTkLabel(
-            f_header_mon, 
+            self.f_header_mon, 
             text="🟢 ¡CONTEO RECIBIDO!" if tiene_monedas else "🟡 Esperando PRINT...",
             font=ctk.CTkFont(size=11, weight="bold"),
             text_color="#34D399" if tiene_monedas else "#FBBF24")
@@ -225,6 +230,7 @@ class VentanaConteo(ctk.CTkToplevel):
             "50a": 50, "50b": 50
         }
 
+        self._filas_mon_items = []
         for label, key in monedas_labels:
             cant = self.monedas.get(key, 0)
             subtotal = cant * valores_monedas.get(key, 0)
@@ -238,8 +244,10 @@ class VentanaConteo(ctk.CTkToplevel):
             fila.pack(fill="x", padx=8, pady=1)
             self.filas_monedas[key] = fila
 
-            ctk.CTkLabel(fila, text=label, width=70,
-                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left", padx=(4, 0))
+            den_lbl = ctk.CTkLabel(fila, text=label, width=70,
+                         font=ctk.CTkFont(size=12, weight="bold"))
+            den_lbl.pack(side="left", padx=(4, 0))
+
             lbl_c = ctk.CTkLabel(
                 fila, text=f"{cant}",
                 width=35, 
@@ -249,11 +257,13 @@ class VentanaConteo(ctk.CTkToplevel):
             lbl_c.pack(side="left")
             self.labels_cant_monedas[key] = lbl_c
 
-            ctk.CTkLabel(
+            uds_lbl = ctk.CTkLabel(
                 fila, text="uds",
                 text_color="#9CA3AF" if cant > 0 else "#6B7280", 
                 font=ctk.CTkFont(size=11)
-            ).pack(side="left", padx=(2, 6))
+            )
+            uds_lbl.pack(side="left", padx=(2, 6))
+
             lbl_sub = ctk.CTkLabel(
                 fila, text=fmt_cop(subtotal),
                 text_color="#A7F3D0" if cant > 0 else "#6B7280", 
@@ -262,15 +272,21 @@ class VentanaConteo(ctk.CTkToplevel):
             lbl_sub.pack(side="right", padx=(0, 4))
             self.labels_subtotal_monedas[key] = lbl_sub
 
+            self._filas_mon_items.append({
+                "key": key, "fila": fila, "den_lbl": den_lbl,
+                "lbl_c": lbl_c, "uds_lbl": uds_lbl, "lbl_sub": lbl_sub
+            })
+
         # Total monedas
-        sep = ctk.CTkFrame(self.frame_mon, height=1, fg_color="#374151")
-        sep.pack(fill="x", padx=10, pady=3)
-        f_tm = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
-        f_tm.pack(fill="x", padx=10, pady=(0, 6))
-        ctk.CTkLabel(f_tm, text="Total monedas:",
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+        self.sep_mon = ctk.CTkFrame(self.frame_mon, height=1, fg_color="#374151")
+        self.sep_mon.pack(fill="x", padx=10, pady=3)
+        self.f_tm = ctk.CTkFrame(self.frame_mon, fg_color="transparent")
+        self.f_tm.pack(fill="x", padx=10, pady=(0, 6))
+        self.lbl_tm_titulo = ctk.CTkLabel(self.f_tm, text="Total monedas:",
+                     font=ctk.CTkFont(size=12, weight="bold"))
+        self.lbl_tm_titulo.pack(side="left")
         self.lbl_tm_valor = ctk.CTkLabel(
-            f_tm, text=fmt_cop(tm),
+            self.f_tm, text=fmt_cop(tm),
             font=ctk.CTkFont(size=13, weight="bold"),
             text_color="#34D399" if tiene_monedas else "#60A5FA"
         )
@@ -279,15 +295,17 @@ class VentanaConteo(ctk.CTkToplevel):
         self._tm = tm
 
         # ── Panel BILLETES (derecha) ──
-        frame_bil = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=10)
-        frame_bil.grid(row=1, column=1, padx=(5, 10), pady=3, sticky="nsew")
+        self.frame_bil = ctk.CTkFrame(self, fg_color="#1F2937", corner_radius=10)
+        self.frame_bil.grid(row=1, column=1, padx=(5, 10), pady=3, sticky="nsew")
 
-        ctk.CTkLabel(frame_bil, text="BILLETES (manual)",
+        self.lbl_billetes_header = ctk.CTkLabel(self.frame_bil, text="BILLETES (manual)",
                      font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color="#FBBF24").pack(anchor="w", padx=10, pady=(6, 2))
+                     text_color="#FBBF24")
+        self.lbl_billetes_header.pack(anchor="w", padx=10, pady=(6, 2))
 
         self.campos_billetes = {}
         self._entradas_billetes = []
+        self._filas_bil_items = []
         billetes_def = [
             ("$2.000",    "2000"),
             ("$5.000",    "5000"),
@@ -297,69 +315,80 @@ class VentanaConteo(ctk.CTkToplevel):
             ("$100.000",  "100000"),
         ]
         for label, key in billetes_def:
-            fila = ctk.CTkFrame(frame_bil, fg_color="transparent")
+            fila = ctk.CTkFrame(self.frame_bil, fg_color="transparent")
             fila.pack(fill="x", padx=10, pady=1)
-            ctk.CTkLabel(fila, text=label, width=75,
-                         font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
+            den_lbl = ctk.CTkLabel(fila, text=label, width=75,
+                         font=ctk.CTkFont(size=12, weight="bold"))
+            den_lbl.pack(side="left")
             entry = ctk.CTkEntry(fila, width=55, placeholder_text="0", height=26)
             entry.pack(side="left", padx=4)
-            ctk.CTkLabel(fila, text="uds", text_color="#9CA3AF",
-                         font=ctk.CTkFont(size=11)).pack(side="left")
+            uds_lbl = ctk.CTkLabel(fila, text="uds", text_color="#9CA3AF",
+                         font=ctk.CTkFont(size=11))
+            uds_lbl.pack(side="left")
             entry.bind("<KeyRelease>", lambda e: self._actualizar_total())
             self.campos_billetes[key] = entry
             self._entradas_billetes.append(entry)
+            self._filas_bil_items.append({
+                "key": key, "fila": fila, "den_lbl": den_lbl,
+                "entry": entry, "uds_lbl": uds_lbl
+            })
 
         # Total billetes
-        sep2 = ctk.CTkFrame(frame_bil, height=1, fg_color="#374151")
-        sep2.pack(fill="x", padx=10, pady=3)
-        f_tb = ctk.CTkFrame(frame_bil, fg_color="transparent")
-        f_tb.pack(fill="x", padx=10, pady=(0, 6))
-        ctk.CTkLabel(f_tb, text="Total billetes:",
-                     font=ctk.CTkFont(size=12, weight="bold")).pack(side="left")
-        self.lbl_tb = ctk.CTkLabel(f_tb, text="$ 0",
+        self.sep_bil = ctk.CTkFrame(self.frame_bil, height=1, fg_color="#374151")
+        self.sep_bil.pack(fill="x", padx=10, pady=3)
+        self.f_tb = ctk.CTkFrame(self.frame_bil, fg_color="transparent")
+        self.f_tb.pack(fill="x", padx=10, pady=(0, 6))
+        self.lbl_tb_titulo = ctk.CTkLabel(self.f_tb, text="Total billetes:",
+                     font=ctk.CTkFont(size=12, weight="bold"))
+        self.lbl_tb_titulo.pack(side="left")
+        self.lbl_tb = ctk.CTkLabel(self.f_tb, text="$ 0",
                                     font=ctk.CTkFont(size=13, weight="bold"),
                                     text_color="#FBBF24")
         self.lbl_tb.pack(side="right")
 
         # ── Datos del turno ──
-        frame_datos = ctk.CTkFrame(self, fg_color="#111827", corner_radius=10)
-        frame_datos.grid(row=2, column=0, columnspan=2,
+        self.frame_datos = ctk.CTkFrame(self, fg_color="#111827", corner_radius=10)
+        self.frame_datos.grid(row=2, column=0, columnspan=2,
                          padx=10, pady=4, sticky="ew")
-        frame_datos.grid_columnconfigure(1, weight=1)
-        frame_datos.grid_columnconfigure(3, weight=1)
+        self.frame_datos.grid_columnconfigure(1, weight=1)
+        self.frame_datos.grid_columnconfigure(3, weight=1)
 
         # Trabajador
-        ctk.CTkLabel(frame_datos, text="Trabajador:",
-                     font=ctk.CTkFont(size=12)).grid(
+        self.lbl_datos_trabajador = ctk.CTkLabel(self.frame_datos, text="Trabajador:",
+                     font=ctk.CTkFont(size=12))
+        self.lbl_datos_trabajador.grid(
             row=0, column=0, padx=(10, 4), pady=5, sticky="w")
         self.combo_trabajador = SelectorTrabajador(
-            frame_datos, width=240)
+            self.frame_datos, width=240)
         self.combo_trabajador.grid(row=0, column=1, padx=4, pady=5, sticky="ew")
 
         # Parqueadero
-        ctk.CTkLabel(frame_datos, text="Parqueadero:",
-                     font=ctk.CTkFont(size=12)).grid(
+        self.lbl_datos_parq = ctk.CTkLabel(self.frame_datos, text="Parqueadero:",
+                     font=ctk.CTkFont(size=12))
+        self.lbl_datos_parq.grid(
             row=0, column=2, padx=(10, 4), pady=5, sticky="w")
         self.combo_parqueadero = ctk.CTkComboBox(
-            frame_datos, values=PARQUEADEROS, width=130, height=28)
+            self.frame_datos, values=PARQUEADEROS, width=130, height=28)
         self.combo_parqueadero.set(PARQUEADEROS[0])
         self.combo_parqueadero.grid(row=0, column=3, padx=(4, 10), pady=5, sticky="ew")
 
         # Hoja Destino y Fecha del Recaudo
-        ctk.CTkLabel(frame_datos, text="Destino Hoja:",
-                     font=ctk.CTkFont(size=12)).grid(
+        self.lbl_datos_hoja = ctk.CTkLabel(self.frame_datos, text="Destino Hoja:",
+                     font=ctk.CTkFont(size=12))
+        self.lbl_datos_hoja.grid(
             row=1, column=0, padx=(10, 4), pady=(0, 5), sticky="w")
         self.combo_hoja = ctk.CTkComboBox(
-            frame_datos, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=140, height=28)
+            self.frame_datos, values=["📁 Pruebas", "⚠️ PRINCIPAL"], width=140, height=28)
         self.combo_hoja.set("⚠️ PRINCIPAL")
         self.combo_hoja.grid(row=1, column=1, padx=4, pady=(0, 5), sticky="w")
 
-        ctk.CTkLabel(frame_datos, text="Fecha:",
-                     font=ctk.CTkFont(size=12)).grid(
+        self.lbl_datos_fecha = ctk.CTkLabel(self.frame_datos, text="Fecha:",
+                     font=ctk.CTkFont(size=12))
+        self.lbl_datos_fecha.grid(
             row=1, column=2, padx=(10, 4), pady=(0, 5), sticky="w")
 
-        f_dia = ctk.CTkFrame(frame_datos, fg_color="transparent")
-        f_dia.grid(row=1, column=3, padx=(4, 10), pady=(0, 5), sticky="ew")
+        self.f_dia = ctk.CTkFrame(self.frame_datos, fg_color="transparent")
+        self.f_dia.grid(row=1, column=3, padx=(4, 10), pady=(0, 5), sticky="ew")
 
         from sheets.google_sheets import (
             generar_opciones_fechas_combo, extraer_fecha_de_opcion,
@@ -369,7 +398,7 @@ class VentanaConteo(ctk.CTkToplevel):
         opcion_defecto = obtener_opcion_defecto_combo(dias_opciones)
 
         self.combo_dia = ctk.CTkComboBox(
-            f_dia, values=dias_opciones, width=240, height=28,
+            self.f_dia, values=dias_opciones, width=240, height=28,
             command=self._on_cambio_dia)
         self.combo_dia.set(opcion_defecto)
         self.combo_dia.pack(side="left")
@@ -377,7 +406,7 @@ class VentanaConteo(ctk.CTkToplevel):
         fecha_ini = extraer_fecha_de_opcion(opcion_defecto)
         pestana_ini = obtener_nombre_pestana_mes(fecha_ini)
         self.lbl_fecha_txt = ctk.CTkLabel(
-            f_dia, text=f"📁 {pestana_ini}",
+            self.f_dia, text=f"📁 {pestana_ini}",
             text_color="#10B981", font=ctk.CTkFont(size=12, weight="bold"))
         self.lbl_fecha_txt.pack(side="left", padx=8)
 
@@ -425,31 +454,33 @@ class VentanaConteo(ctk.CTkToplevel):
         self.combo_trabajador.entry.bind("<Up>", _subir_desde_trabajador)
 
         # ── Total turno ──
-        frame_total = ctk.CTkFrame(self, fg_color="#064E3B", corner_radius=10)
-        frame_total.grid(row=3, column=0, columnspan=2,
+        self.frame_total = ctk.CTkFrame(self, fg_color="#064E3B", corner_radius=10)
+        self.frame_total.grid(row=3, column=0, columnspan=2,
                          padx=10, pady=3, sticky="ew")
-        ctk.CTkLabel(frame_total, text="TOTAL TURNO:",
-                     font=ctk.CTkFont(size=14, weight="bold")).pack(side="left", padx=16, pady=7)
-        self.lbl_total = ctk.CTkLabel(frame_total, text=fmt_cop(tm),
+        self.lbl_total_titulo = ctk.CTkLabel(self.frame_total, text="TOTAL TURNO:",
+                     font=ctk.CTkFont(size=14, weight="bold"))
+        self.lbl_total_titulo.pack(side="left", padx=16, pady=7)
+        self.lbl_total = ctk.CTkLabel(self.frame_total, text=fmt_cop(tm),
                                        font=ctk.CTkFont(size=18, weight="bold"),
                                        text_color="#10B981")
         self.lbl_total.pack(side="right", padx=16, pady=7)
 
         # ── Botones ──
-        frame_btns = ctk.CTkFrame(self, fg_color="transparent")
-        frame_btns.grid(row=4, column=0, columnspan=2,
+        self.frame_btns = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_btns.grid(row=4, column=0, columnspan=2,
                         padx=10, pady=(5, 10), sticky="ew")
 
-        ctk.CTkButton(frame_btns, text="Cancelar",
+        self.btn_cancelar = ctk.CTkButton(self.frame_btns, text="Cancelar",
                       fg_color="#374151", hover_color="#4B5563",
-                      width=90, height=36, command=self.destroy).pack(side="left", padx=4)
+                      width=90, height=36, command=self.destroy)
+        self.btn_cancelar.pack(side="left", padx=4)
 
-        self.lbl_estado = ctk.CTkLabel(frame_btns, text="",
+        self.lbl_estado = ctk.CTkLabel(self.frame_btns, text="",
                                         text_color="#9CA3AF")
         self.lbl_estado.pack(side="left", padx=6)
 
         self.btn_guardar = ctk.CTkButton(
-            frame_btns,
+            self.frame_btns,
             text="💾 GUARDAR Y CERRAR",
             fg_color="#107C41", hover_color="#0B5C30",
             font=ctk.CTkFont(size=14, weight="bold"),
@@ -459,6 +490,194 @@ class VentanaConteo(ctk.CTkToplevel):
 
         # Atajo Enter para guardar rápidamente
         self.bind("<Return>", lambda e: self._guardar())
+
+    def _on_configure(self, event):
+        """Detecta cuando la ventana se maximiza o se restaura y aplica el modo correspondiente."""
+        if event.widget != self:
+            return
+
+        es_zoomed = False
+        try:
+            es_zoomed = (self.state() == "zoomed")
+        except Exception:
+            pass
+
+        w = self.winfo_width()
+        h = self.winfo_height()
+
+        # Activar modo grande si está maximizada o con tamaño amplio (>=950x700)
+        es_grande = es_zoomed or (w >= 950 and h >= 700)
+
+        if es_grande != self._es_modo_grande:
+            self._es_modo_grande = es_grande
+            self._aplicar_modo_grande(es_grande)
+
+    def _aplicar_modo_grande(self, es_grande):
+        """Ajusta fuentes, paddings y alturas para pantalla completa o regresa a la vista reducida."""
+        if es_grande:
+            # ── MODO VENTANA COMPLETA (MAXIMIZADA) ──
+            self.grid_rowconfigure(1, weight=1)
+
+            # Top bar
+            self.f_top.grid_configure(padx=24, pady=(12, 6))
+            self.lbl_titulo.configure(font=ctk.CTkFont(size=22, weight="bold"))
+            self.btn_historial_rapido.configure(width=130, height=34, font=ctk.CTkFont(size=13, weight="bold"))
+            if hasattr(self, "btn_monitor"):
+                self.btn_monitor.configure(width=140, height=34, font=ctk.CTkFont(size=13, weight="bold"))
+
+            # Paneles Monedas y Billetes
+            self.frame_mon.grid_configure(padx=(24, 12), pady=6)
+            self.frame_bil.grid_configure(padx=(12, 24), pady=6)
+
+            # Header Monedas
+            self.f_header_mon.pack_configure(padx=16, pady=(10, 4))
+            self.lbl_monedas_header.configure(font=ctk.CTkFont(size=16, weight="bold"))
+            self.btn_recuperar.configure(width=120, height=28, font=ctk.CTkFont(size=12, weight="bold"))
+            self.lbl_espera_print.configure(font=ctk.CTkFont(size=14, weight="bold"))
+
+            # Filas de Monedas
+            for it in self._filas_mon_items:
+                cant = self.monedas.get(it["key"], 0)
+                it["fila"].pack_configure(padx=14, pady=5)
+                it["den_lbl"].configure(width=100, font=ctk.CTkFont(size=16, weight="bold"))
+                it["lbl_c"].configure(
+                    width=50,
+                    font=ctk.CTkFont(size=20, weight="bold") if cant > 0 else ctk.CTkFont(size=17)
+                )
+                it["uds_lbl"].configure(font=ctk.CTkFont(size=14))
+                it["lbl_sub"].configure(
+                    font=ctk.CTkFont(size=17, weight="bold" if cant > 0 else "normal")
+                )
+
+            self.sep_mon.pack_configure(padx=16, pady=6)
+            self.f_tm.pack_configure(padx=16, pady=(4, 10))
+            self.lbl_tm_titulo.configure(font=ctk.CTkFont(size=16, weight="bold"))
+            self.lbl_tm_valor.configure(font=ctk.CTkFont(size=22, weight="bold"))
+
+            # Header Billetes
+            self.lbl_billetes_header.configure(font=ctk.CTkFont(size=16, weight="bold"))
+            self.lbl_billetes_header.pack_configure(padx=16, pady=(10, 4))
+
+            # Filas de Billetes
+            for it in self._filas_bil_items:
+                it["fila"].pack_configure(padx=16, pady=7)
+                it["den_lbl"].configure(width=110, font=ctk.CTkFont(size=16, weight="bold"))
+                it["entry"].configure(width=90, height=38, font=ctk.CTkFont(size=18, weight="bold"))
+                it["uds_lbl"].configure(font=ctk.CTkFont(size=14))
+
+            self.sep_bil.pack_configure(padx=16, pady=6)
+            self.f_tb.pack_configure(padx=16, pady=(4, 10))
+            self.lbl_tb_titulo.configure(font=ctk.CTkFont(size=16, weight="bold"))
+            self.lbl_tb.configure(font=ctk.CTkFont(size=22, weight="bold"))
+
+            # Datos del turno
+            self.frame_datos.grid_configure(padx=24, pady=8)
+            self.lbl_datos_trabajador.configure(font=ctk.CTkFont(size=14, weight="bold"))
+            self.lbl_datos_parq.configure(font=ctk.CTkFont(size=14, weight="bold"))
+            self.lbl_datos_hoja.configure(font=ctk.CTkFont(size=14, weight="bold"))
+            self.lbl_datos_fecha.configure(font=ctk.CTkFont(size=14, weight="bold"))
+
+            self.combo_trabajador.set_tamano_grande(True)
+            self.combo_parqueadero.configure(height=38, font=ctk.CTkFont(size=14))
+            self.combo_hoja.configure(height=38, font=ctk.CTkFont(size=14))
+            self.combo_dia.configure(height=38, font=ctk.CTkFont(size=14))
+            self.lbl_fecha_txt.configure(font=ctk.CTkFont(size=14, weight="bold"))
+
+            # Total turno
+            self.frame_total.grid_configure(padx=24, pady=6)
+            self.lbl_total_titulo.configure(font=ctk.CTkFont(size=20, weight="bold"))
+            self.lbl_total_titulo.pack_configure(padx=24, pady=12)
+            self.lbl_total.configure(font=ctk.CTkFont(size=32, weight="bold"))
+            self.lbl_total.pack_configure(padx=24, pady=12)
+
+            # Botones
+            self.frame_btns.grid_configure(padx=24, pady=(8, 16))
+            self.btn_cancelar.configure(width=130, height=44, font=ctk.CTkFont(size=14))
+            self.lbl_estado.configure(font=ctk.CTkFont(size=14, weight="bold"))
+            self.btn_guardar.configure(width=280, height=48, font=ctk.CTkFont(size=17, weight="bold"))
+
+        else:
+            # ── MODO VENTANA REDUCIDA (NORMAL) ──
+            # Restaurar exactamente a los valores originales
+            self.grid_rowconfigure(1, weight=0)
+
+            # Top bar
+            self.f_top.grid_configure(padx=10, pady=(8, 4))
+            self.lbl_titulo.configure(font=ctk.CTkFont(size=15, weight="bold"))
+            self.btn_historial_rapido.configure(width=90, height=26, font=ctk.CTkFont(size=11, weight="bold"))
+            if hasattr(self, "btn_monitor"):
+                self.btn_monitor.configure(width=110, height=26, font=ctk.CTkFont(size=11, weight="bold"))
+
+            # Paneles Monedas y Billetes
+            self.frame_mon.grid_configure(padx=(10, 5), pady=3)
+            self.frame_bil.grid_configure(padx=(5, 10), pady=3)
+
+            # Header Monedas
+            self.f_header_mon.pack_configure(padx=10, pady=(6, 2))
+            self.lbl_monedas_header.configure(font=ctk.CTkFont(size=12, weight="bold"))
+            self.btn_recuperar.configure(width=90, height=22, font=ctk.CTkFont(size=10))
+            self.lbl_espera_print.configure(font=ctk.CTkFont(size=11, weight="bold"))
+
+            # Filas de Monedas
+            for it in self._filas_mon_items:
+                cant = self.monedas.get(it["key"], 0)
+                it["fila"].pack_configure(padx=8, pady=1)
+                it["den_lbl"].configure(width=70, font=ctk.CTkFont(size=12, weight="bold"))
+                it["lbl_c"].configure(
+                    width=35,
+                    font=ctk.CTkFont(size=13, weight="bold") if cant > 0 else ctk.CTkFont(size=12)
+                )
+                it["uds_lbl"].configure(font=ctk.CTkFont(size=11))
+                it["lbl_sub"].configure(
+                    font=ctk.CTkFont(size=11, weight="bold" if cant > 0 else "normal")
+                )
+
+            self.sep_mon.pack_configure(padx=10, pady=3)
+            self.f_tm.pack_configure(padx=10, pady=(0, 6))
+            self.lbl_tm_titulo.configure(font=ctk.CTkFont(size=12, weight="bold"))
+            self.lbl_tm_valor.configure(font=ctk.CTkFont(size=13, weight="bold"))
+
+            # Header Billetes
+            self.lbl_billetes_header.configure(font=ctk.CTkFont(size=12, weight="bold"))
+            self.lbl_billetes_header.pack_configure(padx=10, pady=(6, 2))
+
+            # Filas de Billetes
+            for it in self._filas_bil_items:
+                it["fila"].pack_configure(padx=10, pady=1)
+                it["den_lbl"].configure(width=75, font=ctk.CTkFont(size=12, weight="bold"))
+                it["entry"].configure(width=55, height=26, font=ctk.CTkFont(size=13))
+                it["uds_lbl"].configure(font=ctk.CTkFont(size=11))
+
+            self.sep_bil.pack_configure(padx=10, pady=3)
+            self.f_tb.pack_configure(padx=10, pady=(0, 6))
+            self.lbl_tb_titulo.configure(font=ctk.CTkFont(size=12, weight="bold"))
+            self.lbl_tb.configure(font=ctk.CTkFont(size=13, weight="bold"))
+
+            # Datos del turno
+            self.frame_datos.grid_configure(padx=10, pady=4)
+            self.lbl_datos_trabajador.configure(font=ctk.CTkFont(size=12))
+            self.lbl_datos_parq.configure(font=ctk.CTkFont(size=12))
+            self.lbl_datos_hoja.configure(font=ctk.CTkFont(size=12))
+            self.lbl_datos_fecha.configure(font=ctk.CTkFont(size=12))
+
+            self.combo_trabajador.set_tamano_grande(False)
+            self.combo_parqueadero.configure(height=28, font=ctk.CTkFont(size=12))
+            self.combo_hoja.configure(height=28, font=ctk.CTkFont(size=12))
+            self.combo_dia.configure(height=28, font=ctk.CTkFont(size=12))
+            self.lbl_fecha_txt.configure(font=ctk.CTkFont(size=12, weight="bold"))
+
+            # Total turno
+            self.frame_total.grid_configure(padx=10, pady=3)
+            self.lbl_total_titulo.configure(font=ctk.CTkFont(size=14, weight="bold"))
+            self.lbl_total_titulo.pack_configure(padx=16, pady=7)
+            self.lbl_total.configure(font=ctk.CTkFont(size=18, weight="bold"))
+            self.lbl_total.pack_configure(padx=16, pady=7)
+
+            # Botones
+            self.frame_btns.grid_configure(padx=10, pady=(5, 10))
+            self.btn_cancelar.configure(width=90, height=36, font=ctk.CTkFont(size=12))
+            self.lbl_estado.configure(font=ctk.CTkFont(size=12))
+            self.btn_guardar.configure(width=190, height=38, font=ctk.CTkFont(size=14, weight="bold"))
 
     def _recuperar_anterior(self):
         """Restaura los datos del turno anterior guardados en la app principal."""
@@ -495,16 +714,19 @@ class VentanaConteo(ctk.CTkToplevel):
             subtotal = cant * valores_monedas.get(key, 0)
             tm += subtotal
             if key in self.labels_cant_monedas:
+                sz_c = 20 if self._es_modo_grande else 13
+                sz_c_norm = 17 if self._es_modo_grande else 12
                 self.labels_cant_monedas[key].configure(
                     text=str(cant),
                     text_color="#34D399" if cant > 0 else "#6B7280",
-                    font=ctk.CTkFont(size=13, weight="bold") if cant > 0 else ctk.CTkFont(size=12)
+                    font=ctk.CTkFont(size=sz_c, weight="bold") if cant > 0 else ctk.CTkFont(size=sz_c_norm)
                 )
             if key in self.labels_subtotal_monedas:
+                sz_s = 17 if self._es_modo_grande else 11
                 self.labels_subtotal_monedas[key].configure(
                     text=fmt_cop(subtotal),
                     text_color="#A7F3D0" if cant > 0 else "#6B7280",
-                    font=ctk.CTkFont(size=11, weight="bold" if cant > 0 else "normal")
+                    font=ctk.CTkFont(size=sz_s, weight="bold" if cant > 0 else "normal")
                 )
             if key in self.filas_monedas:
                 self.filas_monedas[key].configure(
@@ -512,9 +734,11 @@ class VentanaConteo(ctk.CTkToplevel):
                 )
 
         self._tm = tm
-        self.lbl_tm_valor.configure(text=fmt_cop(tm), text_color="#34D399", font=ctk.CTkFont(size=14, weight="bold"))
+        sz_tm = 22 if self._es_modo_grande else 14
+        self.lbl_tm_valor.configure(text=fmt_cop(tm), text_color="#34D399", font=ctk.CTkFont(size=sz_tm, weight="bold"))
         self.lbl_espera_print.configure(text="🟢 ¡CONTEO RECIBIDO!", text_color="#34D399")
-        self.lbl_titulo.configure(text="✅ ¡Monedas Recibidas de la Máquina!", text_color="#34D399")
+        sz_tit = 22 if self._es_modo_grande else 15
+        self.lbl_titulo.configure(text="✅ ¡Monedas Recibidas de la Máquina!", text_color="#34D399", font=ctk.CTkFont(size=sz_tit, weight="bold"))
         self._actualizar_total()
 
         # Destello verde para despertar visual inmediato
@@ -534,7 +758,8 @@ class VentanaConteo(ctk.CTkToplevel):
     def _animar_destello_verde(self):
         """Efecto visual de destello verde en el marco de monedas."""
         try:
-            self.frame_mon.configure(border_color="#34D399", border_width=3, fg_color="#064E3B")
+            bw = 4 if self._es_modo_grande else 3
+            self.frame_mon.configure(border_color="#34D399", border_width=bw, fg_color="#064E3B")
             def _normalizar():
                 try:
                     self.frame_mon.configure(border_color="#10B981", border_width=2, fg_color="#1F2937")
