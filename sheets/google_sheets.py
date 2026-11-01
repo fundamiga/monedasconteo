@@ -252,7 +252,121 @@ def _fila_tiene_conteo(r):
     return False
 
 
-def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
+def crear_tabla_dia_faltante(worksheet, fecha_str):
+    """
+    Si una fecha (ej: 31/10/2026 o 31/12/2026) no tiene tabla en la hoja del mes,
+    duplica automáticamente el último bloque diario existente al final de la hoja,
+    actualiza la celda de la fecha y limpia los nombres y valores para dejar la nueva
+    tabla lista con todas sus fórmulas, estilos y totales intactos.
+    """
+    try:
+        col_a = worksheet.col_values(1)
+        idx_ultimo_total = None
+        idx_ultima_fecha = None
+        for i, val in enumerate(col_a):
+            txt = str(val).strip().upper()
+            if '/' in val and len(val) > 0 and val[0].isdigit():
+                idx_ultima_fecha = i + 1  # 1-based
+            elif "TOTAL DIA" in txt:
+                idx_ultimo_total = i + 1  # 1-based
+
+        if not idx_ultimo_total or not idx_ultima_fecha:
+            return False
+
+        # El bloque del día va desde (idx_ultima_fecha - 2) hasta idx_ultimo_total (usualmente 81 filas)
+        fila_inicio_bloque = max(1, idx_ultima_fecha - 2)
+        fila_fin_bloque = idx_ultimo_total
+        tam_bloque = fila_fin_bloque - fila_inicio_bloque + 1
+
+        # Fila donde inicia el nuevo bloque
+        fila_dest_inicio = fila_fin_bloque + 1
+        fila_dest_fin = fila_dest_inicio + tam_bloque - 1
+
+        # Asegurar que la hoja tenga suficientes filas
+        if worksheet.row_count < fila_dest_fin + 10:
+            worksheet.add_rows(max(100, tam_bloque + 20))
+
+        # Duplicar bloque con copyPaste (preserva fórmulas relativas, estilos y bordes)
+        req = {
+            'requests': [
+                {
+                    'copyPaste': {
+                        'source': {
+                            'sheetId': worksheet.id,
+                            'startRowIndex': fila_inicio_bloque - 1,
+                            'endRowIndex': fila_fin_bloque,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': 19
+                        },
+                        'destination': {
+                            'sheetId': worksheet.id,
+                            'startRowIndex': fila_dest_inicio - 1,
+                            'endRowIndex': fila_dest_fin,
+                            'startColumnIndex': 0,
+                            'endColumnIndex': 19
+                        },
+                        'pasteType': 'PASTE_NORMAL',
+                        'pasteOrientation': 'NORMAL'
+                    }
+                }
+            ]
+        }
+        worksheet.spreadsheet.batch_update(req)
+
+        # Actualizar celda de la fecha
+        fila_nueva_fecha = fila_dest_inicio + (idx_ultima_fecha - fila_inicio_bloque)
+        worksheet.update_cell(fila_nueva_fecha, 1, fecha_str)
+
+        # Limpiar filas de trabajadores en el bloque duplicado
+        PARQUEADEROS_SET = {
+            "5 CON 6", "6 CON 6", "CARTON", "GUACANDA", "GALERIA",
+            "ROZO", "2 CON 10", "MAYORISTA", "BOLIVAR", "GUABINAS"
+        }
+        rango_leer = f"A{fila_dest_inicio}:Q{fila_dest_fin}"
+        filas_nuevas = worksheet.get(rango_leer, value_render_option='FORMULA')
+
+        updates = []
+        filas_totales_parq = []
+
+        for offset, r in enumerate(filas_nuevas):
+            num_f = fila_dest_inicio + offset
+            c0 = str(r[0]).strip().upper() if r and len(r) > 0 else ""
+
+            if c0 in PARQUEADEROS_SET:
+                continue
+            elif "TOTAL TURNO" in c0:
+                filas_totales_parq.append(num_f)
+                continue
+            elif "TOTAL DIA" in c0 or num_f == fila_nueva_fecha:
+                continue
+
+            # Fila normal de trabajador: limpiar nombre (col A), monedas (C:J) y billetes (L:Q)
+            updates.append({'range': f'A{num_f}', 'values': [['']]})
+            updates.append({'range': f'C{num_f}:J{num_f}', 'values': [['']*8]})
+            updates.append({'range': f'L{num_f}:Q{num_f}', 'values': [['']*6]})
+
+        if updates:
+            worksheet.batch_update(updates)
+
+        # Actualizar fórmulas de TOTAL DIA
+        if len(filas_totales_parq) >= 10:
+            fk = '=' + '+'.join(f'K{p}' for p in filas_totales_parq)
+            fr = '=' + '+'.join(f'R{p}' for p in filas_totales_parq)
+            fs = '=' + '+'.join(f'S{p}' for p in filas_totales_parq)
+            worksheet.batch_update([
+                {'range': f'K{fila_dest_fin - 1}', 'values': [[fk]]},
+                {'range': f'K{fila_dest_fin}', 'values': [[fk]]},
+                {'range': f'R{fila_dest_fin}', 'values': [[fr]]},
+                {'range': f'S{fila_dest_fin}', 'values': [[fs]]},
+            ])
+
+        return True
+    except Exception as e:
+        print(f"Error creando tabla de día faltante: {e}")
+        return False
+
+
+def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador, _reintento=False):
     """
     Busca la fila del trabajador dado una fecha y parqueadero.
     - Si el trabajador tiene una fila con su nombre que AÚN NO tiene conteo: retorna esa fila.
@@ -392,6 +506,11 @@ def buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador):
 
         return nueva_fila
 
+    # Si la fecha ni siquiera existe en la hoja (ej. día 31 no creado), crear la tabla automáticamente y reintentar
+    if not en_fecha and not _reintento:
+        if crear_tabla_dia_faltante(worksheet, fecha_str):
+            return buscar_fila_trabajador(worksheet, fecha_str, parqueadero, trabajador, _reintento=True)
+
     return None
 
 
@@ -487,6 +606,9 @@ def obtener_estructura_hoy(ws=None, dia=None):
                 pass
 
     if inicio is None:
+        fecha_faltante = obtener_fecha_hoy(dia)
+        if crear_tabla_dia_faltante(ws, fecha_faltante):
+            return obtener_estructura_hoy(ws, dia)
         return []
 
     parques = [
